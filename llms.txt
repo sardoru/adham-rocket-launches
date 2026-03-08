@@ -1,0 +1,167 @@
+# Adham's Rocket Launch Tracker — llms.txt
+
+> A single-file static web application that visualizes rocket launches and live satellite constellations on an interactive 3D globe. Designed as an educational tool for a middle school student.
+
+## Project Overview
+
+- **URL**: https://adham-rocket-launches.vercel.app
+- **Repository**: https://github.com/sardoru/adham-rocket-launches
+- **Type**: Static site (single HTML file, no build step, no backend)
+- **Audience**: Middle school student interested in NASA and SpaceX
+
+## File Structure
+
+```
+index.html     — Complete application: HTML structure, CSS styles, and JavaScript logic (~1,600 lines)
+og-image.png   — Open Graph social preview image (1200×630 PNG)
+README.md      — Human-readable documentation
+llms.txt       — This file (agent/LLM-readable project context)
+```
+
+## Technology Stack
+
+All dependencies loaded via CDN. No package.json, no bundler, no build step.
+
+- **Three.js v0.160.0** — 3D rendering engine. Used for particle systems (THREE.Points), orbital path lines (THREE.LineSegments), and BufferGeometry for efficient GPU rendering of 6,000+ satellites.
+- **Globe.gl v2.35.1** — High-level 3D globe library built on three-globe and Three.js. Provides the Earth sphere, atmosphere, rings (launch sites), arcs (trajectories), and labels. Mounted on `#globe-container`.
+- **satellite.js v5.0.0** — JavaScript implementation of SGP4/SDP4 orbital propagation. Converts Two-Line Element (TLE) data into real-time latitude/longitude/altitude positions.
+
+## Data Sources (Free, No API Keys)
+
+### Rocket Launches
+- **API**: The Space Devs Launch Library 2
+- **Endpoints**:
+  - `https://ll.thespacedevs.com/2.2.0/launch/upcoming/?format=json&limit=80&mode=detailed`
+  - `https://ll.thespacedevs.com/2.2.0/launch/previous/?format=json&limit=80&mode=detailed`
+- **Fallback**: Hardcoded array of ~8 launches used when API is unreachable
+- **Refresh**: Fetched once on page load
+
+### Satellite TLE Data
+- **API**: CelesTrak NORAD GP Element Sets
+- **Endpoint pattern**: `https://celestrak.org/NORAD/elements/gp.php?GROUP={group}&FORMAT=tle`
+- **Groups fetched**: `stations` (ISS), `starlink`, `oneweb`, `gps-ops`, `glo-ops`, `galileo`, `iridium-next`, `science`
+- **Format**: Three-Line Element text (name + TLE line 1 + TLE line 2)
+- **Parsing**: Custom `parseTLEText()` handles both 2-line and 3-line formats
+- **Refresh**: Fetched once on page load; positions recomputed every 3 seconds via SGP4
+
+## Application State
+
+Key global variables in the `<script>` block:
+
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `globe` | Globe.gl instance | The 3D globe object |
+| `allLaunches` | `{ upcoming: [], past: [] }` | Parsed launch data |
+| `satRawData` | `{ [key]: TLERecord[] }` | Raw TLE records per constellation |
+| `satPointSystems` | `{ [key]: THREE.Points }` | Particle systems for satellite dots |
+| `satPathLines` | `{ [key]: THREE.LineSegments }` | Line geometries for orbital paths |
+| `SAT_CONSTELLATIONS` | Object | Config for each constellation (color, URL, enabled state) |
+
+## Satellite Rendering Architecture
+
+### Why Direct Three.js Instead of Globe.gl Layers
+
+Globe.gl's built-in `pointsData` renders vertical columns (cylinders from surface to altitude), not floating dots. Its `customLayerData` requires creating individual Three.js objects per data point, which is too slow for 6,000+ satellites. Therefore, satellites are rendered by injecting Three.js objects directly into `globe.scene()`.
+
+### Particle System (Dots)
+- One `THREE.Points` per constellation added to `globe.scene()`
+- Uses `THREE.BufferGeometry` with a `Float32Array` position attribute
+- Updated every 3 seconds: SGP4 propagation → lat/lng/alt → 3D coordinates → update buffer
+- Coordinate conversion: `geoTo3D(lat, lng, alt)` converts geodetic to Cartesian (globe radius = 100)
+
+### Orbital Paths (Lines)
+- One `THREE.LineSegments` per constellation added to `globe.scene()`
+- Each satellite's path = N time steps propagated via SGP4, connected as line segments
+- Longitude-wrap detection: if distance between consecutive 3D points > 50 units, the segment is broken
+- Updated every 30 seconds
+
+### Altitude Scaling Formula
+```
+scaleAlt(altKm):
+  raw = altKm / 6371
+  if raw < 0.15: return raw + 0.02
+  else: return 0.15 + sqrt(raw - 0.15) * 0.3
+```
+This compresses high-altitude orbits (GPS at 20,200 km) to stay visually close to the globe while keeping LEO (400 km) clearly above the surface.
+
+## Constellation Configuration
+
+| Key | Satellites | Altitude | Path Steps | Path Span | Default |
+|-----|-----------|----------|------------|-----------|---------|
+| `iss` | ~14 (stations) | 408 km | 200 | 92 min | ON |
+| `starlink` | ~6,000 | 550 km | 40 | 46 min | ON |
+| `gps` | ~32 | 20,200 km | 100 | 360 min | ON |
+| `glonass` | ~24 | 19,100 km | 100 | 360 min | OFF |
+| `galileo` | ~30 | 23,222 km | 100 | 360 min | OFF |
+| `oneweb` | ~600 | 1,200 km | 40 | 46 min | OFF |
+| `iridium` | ~66 | 780 km | 40 | 46 min | OFF |
+| `science` | ~30 (sampled) | varies | 40 | 46 min | OFF |
+
+## UI Components
+
+### Header (fixed top)
+- Logo with gradient text
+- Stats: Total Launches, Upcoming count, Satellites Live count
+
+### Satellite Panel (fixed top-left)
+- Collapsible panel with toggle switches per constellation
+- Shows satellite count per group
+- Total tracked count at bottom
+- Click any row to toggle constellation on/off (triggers `toggleConstellation(key)`)
+
+### Sidebar (fixed right, 380px)
+- Tabs: Upcoming / Past launches
+- Search input (filters by name, rocket, provider, location)
+- Filter buttons: All, SpaceX, NASA, ULA, Roscosmos
+- Scrollable launch card list
+- Cards show: provider, mission name, date, status badge, countdown timer
+
+### Detail Panel (fixed bottom)
+- Appears when a launch card is clicked
+- Shows: rocket, date, pad, location, status, orbit, mission type
+- Random fun fact from a pool of 20 space facts
+
+### Globe Interactions
+- Click launch card → globe zooms to launch site, shows trajectory arc
+- Auto-rotate at 0.4 speed
+- Mouse/touch: rotate, zoom, pan
+
+## Key Functions Reference
+
+| Function | Purpose |
+|----------|---------|
+| `main()` | Entry point: init globe, fetch data, start updaters |
+| `initGlobe()` | Configure globe.gl instance with all layers |
+| `fetchLaunches()` | Fetch from Space Devs API, parse, fallback |
+| `fetchConstellation(key)` | Fetch TLE data from CelesTrak, parse, store |
+| `loadSatellites()` | Fetch all enabled constellations in parallel |
+| `propagateSat(record, date)` | SGP4 propagation: TLE → {lat, lng, alt} |
+| `updateSatDots(key)` | Rebuild THREE.Points particle system for a constellation |
+| `updateSatPaths(key)` | Rebuild THREE.LineSegments orbital paths for a constellation |
+| `updateSatellitesOnGlobe()` | Update all constellation dots + stats |
+| `updateOrbitalPaths()` | Update all constellation paths |
+| `toggleConstellation(key)` | Toggle a constellation on/off, manage Three.js objects |
+| `selectLaunch(id)` | Zoom globe to launch, show detail panel |
+| `geoTo3D(lat, lng, alt)` | Convert geodetic coords to Three.js Cartesian (R=100) |
+| `scaleAlt(altKm)` | Compress orbital altitude for visual display |
+
+## Deployment
+
+- **Host**: Vercel (auto-deploy on push to `main`)
+- **Build**: None (static file served directly)
+- **Domain**: `adham-rocket-launches.vercel.app`
+
+## How to Modify
+
+To add a new satellite constellation:
+1. Add entry to `SAT_CONSTELLATIONS` with CelesTrak GROUP name, color, and icon
+2. The fetch/render/toggle pipeline handles everything automatically
+
+To change update intervals:
+- Satellite dot positions: `setInterval` in `startSatUpdater()` (default 3000ms)
+- Orbital path recomputation: `setInterval` in `startSatUpdater()` (default 30000ms)
+
+To adjust visual appearance:
+- Satellite dot sizes: `size` parameter in `updateSatDots()` THREE.PointsMaterial
+- Path opacity: `opacity` parameter in `updateSatPaths()` THREE.LineBasicMaterial
+- Altitude compression: modify `scaleAlt()` function
