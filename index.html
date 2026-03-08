@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adham's Rocket Launch Tracker</title>
+  <script src="https://unpkg.com/globe.gl@2.35.1/dist/globe.gl.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background: #0a0a1a;
+      color: #e0e0ff;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    /* Stars background */
+    .stars {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .star {
+      position: absolute;
+      background: white;
+      border-radius: 50%;
+      animation: twinkle var(--duration) ease-in-out infinite alternate;
+    }
+
+    @keyframes twinkle {
+      0% { opacity: 0.2; transform: scale(0.8); }
+      100% { opacity: 1; transform: scale(1.2); }
+    }
+
+    /* Header */
+    .header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(180deg, rgba(10,10,26,0.95) 0%, rgba(10,10,26,0.7) 80%, transparent 100%);
+      backdrop-filter: blur(10px);
+    }
+
+    .logo {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, #00d4ff, #7b61ff, #ff6b6b);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 2px;
+    }
+
+    .logo-sub {
+      font-size: 0.7rem;
+      font-weight: 400;
+      letter-spacing: 4px;
+      color: #6b7db3;
+      text-transform: uppercase;
+    }
+
+    .header-stats {
+      display: flex;
+      gap: 20px;
+      font-family: 'Orbitron', monospace;
+    }
+
+    .stat-box {
+      text-align: center;
+      padding: 6px 16px;
+      border: 1px solid rgba(0,212,255,0.2);
+      border-radius: 8px;
+      background: rgba(0,212,255,0.05);
+    }
+
+    .stat-box .num {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+
+    .stat-box .label {
+      font-size: 0.55rem;
+      color: #6b7db3;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    /* Globe container */
+    #globe-container {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 1;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      top: 70px;
+      right: 0;
+      width: 380px;
+      height: calc(100vh - 70px);
+      z-index: 50;
+      background: linear-gradient(135deg, rgba(10,10,30,0.92) 0%, rgba(20,15,40,0.92) 100%);
+      backdrop-filter: blur(20px);
+      border-left: 1px solid rgba(123,97,255,0.15);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .sidebar.collapsed {
+      transform: translateX(340px);
+    }
+
+    .sidebar-toggle {
+      position: absolute;
+      left: -40px;
+      top: 20px;
+      width: 40px;
+      height: 40px;
+      background: rgba(20,15,40,0.9);
+      border: 1px solid rgba(123,97,255,0.3);
+      border-right: none;
+      border-radius: 8px 0 0 8px;
+      color: #7b61ff;
+      font-size: 1.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      padding: 12px 16px 0;
+      gap: 4px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      color: #6b7db3;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .tab.active {
+      background: rgba(123,97,255,0.15);
+      color: #c4b5ff;
+      border-color: rgba(123,97,255,0.3);
+    }
+
+    .tab:hover { color: #fff; }
+
+    /* Launch list */
+    .launch-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(123,97,255,0.3) transparent;
+    }
+
+    .launch-list::-webkit-scrollbar { width: 4px; }
+    .launch-list::-webkit-scrollbar-thumb { background: rgba(123,97,255,0.3); border-radius: 2px; }
+
+    .launch-card {
+      padding: 14px;
+      margin-bottom: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .launch-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      border-radius: 3px 0 0 3px;
+    }
+
+    .launch-card.spacex::before { background: linear-gradient(180deg, #005288, #a7d8f0); }
+    .launch-card.nasa::before { background: linear-gradient(180deg, #fc3d21, #ffa500); }
+    .launch-card.other::before { background: linear-gradient(180deg, #7b61ff, #c4b5ff); }
+
+    .launch-card:hover {
+      background: rgba(123,97,255,0.08);
+      border-color: rgba(123,97,255,0.25);
+      transform: translateX(-4px);
+    }
+
+    .launch-card.active {
+      background: rgba(123,97,255,0.12);
+      border-color: rgba(123,97,255,0.4);
+      box-shadow: 0 0 20px rgba(123,97,255,0.1);
+    }
+
+    .launch-provider {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+
+    .launch-card.spacex .launch-provider { color: #a7d8f0; }
+    .launch-card.nasa .launch-provider { color: #ff8a65; }
+    .launch-card.other .launch-provider { color: #c4b5ff; }
+
+    .launch-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 6px;
+      line-height: 1.3;
+    }
+
+    .launch-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.75rem;
+      color: #6b7db3;
+    }
+
+    .launch-date {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .launch-status {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status-success { background: rgba(0,200,83,0.15); color: #69f0ae; }
+    .status-upcoming { background: rgba(0,176,255,0.15); color: #40c4ff; }
+    .status-failure { background: rgba(255,82,82,0.15); color: #ff5252; }
+    .status-tbd { background: rgba(255,193,7,0.15); color: #ffd54f; }
+
+    /* Detail panel */
+    .detail-panel {
+      position: fixed;
+      bottom: 0; left: 0;
+      width: calc(100% - 380px);
+      z-index: 50;
+      padding: 20px 30px;
+      background: linear-gradient(0deg, rgba(10,10,26,0.95) 0%, rgba(10,10,26,0.8) 80%, transparent 100%);
+      backdrop-filter: blur(10px);
+      transform: translateY(100%);
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .detail-panel.show { transform: translateY(0); }
+
+    .detail-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .detail-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .detail-provider {
+      font-size: 0.7rem;
+      color: #7b61ff;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .detail-close {
+      background: rgba(255,255,255,0.1);
+      border: none;
+      color: #fff;
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .detail-item {
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .detail-item .label {
+      font-size: 0.6rem;
+      color: #6b7db3;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+
+    .detail-item .value {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #e0e0ff;
+    }
+
+    .fun-fact {
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, rgba(123,97,255,0.08), rgba(0,212,255,0.08));
+      border-radius: 10px;
+      border: 1px solid rgba(123,97,255,0.15);
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .fun-fact strong { color: #00d4ff; }
+
+    /* Loading screen */
+    .loading-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #0a0a1a;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.8s, visibility 0.8s;
+    }
+
+    .loading-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .loading-rocket {
+      font-size: 3rem;
+      animation: rocketBounce 1s ease-in-out infinite;
+    }
+
+    @keyframes rocketBounce {
+      0%, 100% { transform: translateY(0) rotate(-45deg); }
+      50% { transform: translateY(-20px) rotate(-45deg); }
+    }
+
+    .loading-text {
+      font-family: 'Orbitron', monospace;
+      font-size: 1rem;
+      color: #7b61ff;
+      margin-top: 20px;
+      letter-spacing: 4px;
+    }
+
+    .loading-bar {
+      width: 200px;
+      height: 3px;
+      background: rgba(123,97,255,0.2);
+      border-radius: 3px;
+      margin-top: 16px;
+      overflow: hidden;
+    }
+
+    .loading-bar-fill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #7b61ff, #00d4ff);
+      border-radius: 3px;
+      animation: loadBar 2s ease-in-out forwards;
+    }
+
+    @keyframes loadBar {
+      0% { width: 0%; }
+      50% { width: 70%; }
+      100% { width: 100%; }
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      padding: 8px 16px;
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 5px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: transparent;
+      color: #6b7db3;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-btn.active {
+      background: rgba(123,97,255,0.2);
+      border-color: rgba(123,97,255,0.4);
+      color: #c4b5ff;
+    }
+
+    .filter-btn:hover { border-color: rgba(123,97,255,0.3); color: #fff; }
+
+    /* Search */
+    .search-box {
+      padding: 0 16px 8px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.04);
+      color: #fff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .search-box input::placeholder { color: #4a5580; }
+    .search-box input:focus { border-color: rgba(123,97,255,0.4); }
+
+    /* Countdown for upcoming */
+    .countdown {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.75rem;
+      color: #40c4ff;
+      margin-top: 4px;
+    }
+
+    /* Tooltip on globe */
+    .globe-tooltip {
+      background: rgba(10,10,30,0.9) !important;
+      border: 1px solid rgba(123,97,255,0.3) !important;
+      border-radius: 8px !important;
+      padding: 8px 12px !important;
+      font-family: 'Space Grotesk', sans-serif !important;
+      color: #e0e0ff !important;
+      font-size: 0.8rem !important;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar {
+        width: 100%;
+        top: auto;
+        bottom: 0;
+        height: 45vh;
+        border-left: none;
+        border-top: 1px solid rgba(123,97,255,0.15);
+      }
+      .sidebar.collapsed { transform: translateY(calc(45vh - 50px)); }
+      .sidebar-toggle {
+        left: 50%;
+        top: -30px;
+        transform: translateX(-50%);
+        border-radius: 8px 8px 0 0;
+        border: 1px solid rgba(123,97,255,0.3);
+        border-bottom: none;
+        width: 60px;
+        height: 30px;
+      }
+      .detail-panel { width: 100%; display: none; }
+      .header-stats { display: none; }
+      .logo { font-size: 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loading Screen -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="loading-rocket">🚀</div>
+    <div class="loading-text">LAUNCHING</div>
+    <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+  </div>
+
+  <!-- Stars -->
+  <div class="stars" id="stars"></div>
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="logo">ADHAM'S LAUNCH TRACKER</div>
+      <div class="logo-sub">Explore Every Rocket Launch on Earth</div>
+    </div>
+    <div class="header-stats">
+      <div class="stat-box">
+        <div class="num" id="totalLaunches">--</div>
+        <div class="label">Total Launches</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="upcomingCount">--</div>
+        <div class="label">Upcoming</div>
+      </div>
+      <div class="stat-box">
+        <div class="num" id="successRate">--%</div>
+        <div class="label">Success Rate</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Globe -->
+  <div id="globe-container"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" id="sidebarToggle">◀</button>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="upcoming">🚀 Upcoming</button>
+      <button class="tab" data-tab="past">🌟 Past Launches</button>
+    </div>
+
+    <div class="search-box">
+      <input type="text" placeholder="Search missions, rockets..." id="searchInput">
+    </div>
+
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="spacex">SpaceX</button>
+      <button class="filter-btn" data-filter="nasa">NASA</button>
+      <button class="filter-btn" data-filter="ula">ULA</button>
+      <button class="filter-btn" data-filter="roscosmos">Roscosmos</button>
+    </div>
+
+    <div class="launch-list" id="launchList"></div>
+  </div>
+
+  <!-- Detail Panel -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <div>
+        <div class="detail-provider" id="detailProvider"></div>
+        <div class="detail-title" id="detailTitle"></div>
+      </div>
+      <button class="detail-close" id="detailClose">✕</button>
+    </div>
+    <div class="detail-grid" id="detailGrid"></div>
+    <div class="fun-fact" id="funFact"></div>
+  </div>
+
+  <script>
+    // ── State ──
+    let globe;
+    let allLaunches = { upcoming: [], past: [] };
+    let currentTab = 'upcoming';
+    let currentFilter = 'all';
+    let activeLaunchId = null;
+    let arcsData = [];
+
+    // ── Fun Facts ──
+    const funFacts = [
+      "A Falcon 9 rocket reaches speeds over <strong>17,000 mph</strong> — fast enough to circle the Earth in about 90 minutes!",
+      "The Saturn V rocket that took astronauts to the Moon was <strong>363 feet tall</strong> — taller than the Statue of Liberty!",
+      "SpaceX's Starship is designed to carry <strong>100 people</strong> to Mars at once!",
+      "Rocket fuel burns at over <strong>5,000°F</strong> — hot enough to melt steel!",
+      "The ISS orbits Earth at <strong>17,500 mph</strong> and completes 16 orbits every day!",
+      "A Falcon Heavy can produce <strong>5 million pounds</strong> of thrust at liftoff — equal to 18 Boeing 747s at full power!",
+      "NASA's Space Launch System (SLS) is the <strong>most powerful rocket</strong> ever built!",
+      "SpaceX has successfully landed boosters over <strong>300 times</strong>, making rockets reusable!",
+      "The Voyager 1 spacecraft, launched in 1977, is now over <strong>15 billion miles</strong> from Earth — the farthest human-made object!",
+      "It takes about <strong>8.5 minutes</strong> for a rocket to reach orbit after launch!",
+      "Astronauts on the ISS see <strong>16 sunrises and sunsets</strong> every single day!",
+      "The exhaust from a rocket engine exits at about <strong>10 times the speed of sound</strong>!",
+      "A spacesuit costs about <strong>$12 million</strong> to make!",
+      "Rockets work in space because of Newton's Third Law: <strong>every action has an equal and opposite reaction</strong>!",
+      "The first liquid-fueled rocket was launched by Robert Goddard in <strong>1926</strong> and flew for only 2.5 seconds!"
+    ];
+
+    // ── Known Launch Sites (for fallback) ──
+    const knownSites = {
+      'Kennedy Space Center': { lat: 28.5729, lng: -80.6490 },
+      'Cape Canaveral': { lat: 28.3922, lng: -80.6077 },
+      'Vandenberg': { lat: 34.7420, lng: -120.5724 },
+      'Baikonur': { lat: 45.9650, lng: 63.3050 },
+      'Guiana Space Centre': { lat: 5.2390, lng: -52.7689 },
+      'Satish Dhawan': { lat: 13.7199, lng: 80.2304 },
+      'Tanegashima': { lat: 30.4000, lng: 131.0000 },
+      'Jiuquan': { lat: 40.9606, lng: 100.2914 },
+      'Wenchang': { lat: 19.6145, lng: 110.9510 },
+      'Xichang': { lat: 28.2463, lng: 102.0267 },
+      'Wallops': { lat: 37.8433, lng: -75.4784 },
+      'Plesetsk': { lat: 62.9271, lng: 40.5777 },
+      'Vostochny': { lat: 51.8844, lng: 128.3340 },
+      'Starbase': { lat: 25.9972, lng: -97.1556 },
+      'Mahia': { lat: -39.2615, lng: 177.8649 },
+      'Kodiak': { lat: 57.4350, lng: -152.3378 },
+      'Palmachim': { lat: 31.8849, lng: 34.6827 },
+      'Semnan': { lat: 35.2346, lng: 53.9208 },
+    };
+
+    // ── Simulated Orbit Targets ──
+    const orbitTargets = [
+      { lat: 0, lng: -30, label: 'GEO Transfer' },
+      { lat: 51.6, lng: -10, label: 'ISS Orbit' },
+      { lat: -20, lng: 60, label: 'LEO East' },
+      { lat: 30, lng: 140, label: 'LEO Pacific' },
+      { lat: -45, lng: -90, label: 'Polar South' },
+      { lat: 60, lng: 100, label: 'Polar North' },
+      { lat: 10, lng: -160, label: 'GTO Pacific' },
+      { lat: -10, lng: 30, label: 'LEO Africa' },
+    ];
+
+    // ── Init Stars ──
+    function createStars() {
+      const container = document.getElementById('stars');
+      for (let i = 0; i < 200; i++) {
+        const star = document.createElement('div');
+        star.className = 'star';
+        const size = Math.random() * 2 + 1;
+        star.style.width = size + 'px';
+        star.style.height = size + 'px';
+        star.style.left = Math.random() * 100 + '%';
+        star.style.top = Math.random() * 100 + '%';
+        star.style.setProperty('--duration', (Math.random() * 3 + 1) + 's');
+        star.style.animationDelay = Math.random() * 3 + 's';
+        container.appendChild(star);
+      }
+    }
+
+    // ── Parse launch data from API ──
+    function parseLaunch(raw, isPast) {
+      const providerName = raw.launch_service_provider?.name || '';
+      let provider = 'other';
+      if (/spacex/i.test(providerName)) provider = 'spacex';
+      else if (/nasa|national aeronautics/i.test(providerName)) provider = 'nasa';
+      else if (/united launch alliance|ula/i.test(providerName)) provider = 'ula';
+      else if (/roscosmos|russian/i.test(providerName)) provider = 'roscosmos';
+
+      let statusText = 'TBD';
+      let statusClass = 'status-tbd';
+      if (isPast) {
+        const s = raw.status?.abbrev || '';
+        if (s === 'Success') { statusText = 'Success'; statusClass = 'status-success'; }
+        else if (s === 'Failure') { statusText = 'Failure'; statusClass = 'status-failure'; }
+        else if (s === 'Partial Failure') { statusText = 'Partial'; statusClass = 'status-failure'; }
+        else { statusText = s || 'Unknown'; statusClass = 'status-tbd'; }
+      } else {
+        const s = raw.status?.abbrev || '';
+        if (s === 'Go') { statusText = 'Go for Launch'; statusClass = 'status-success'; }
+        else if (s === 'TBD') { statusText = 'TBD'; statusClass = 'status-tbd'; }
+        else if (s === 'TBC') { statusText = 'To Be Confirmed'; statusClass = 'status-upcoming'; }
+        else { statusText = s || 'Upcoming'; statusClass = 'status-upcoming'; }
+      }
+
+      // Get lat/lng from pad
+      let lat = raw.pad?.latitude ? parseFloat(raw.pad.latitude) : null;
+      let lng = raw.pad?.longitude ? parseFloat(raw.pad.longitude) : null;
+
+      // Fallback to known sites
+      if (!lat || !lng || (lat === 0 && lng === 0)) {
+        const padName = raw.pad?.name || raw.pad?.location?.name || '';
+        for (const [key, val] of Object.entries(knownSites)) {
+          if (padName.toLowerCase().includes(key.toLowerCase())) {
+            lat = val.lat;
+            lng = val.lng;
+            break;
+          }
+        }
+      }
+
+      return {
+        id: raw.id,
+        name: raw.name || 'Unknown Mission',
+        rocket: raw.rocket?.configuration?.name || 'Unknown Rocket',
+        provider: provider,
+        providerName: providerName,
+        date: raw.net ? new Date(raw.net) : null,
+        status: statusText,
+        statusClass: statusClass,
+        lat: lat,
+        lng: lng,
+        padName: raw.pad?.name || 'Unknown Pad',
+        location: raw.pad?.location?.name || 'Unknown Location',
+        mission: raw.mission?.description || null,
+        missionType: raw.mission?.type || null,
+        orbit: raw.mission?.orbit?.name || null,
+        image: raw.image || null,
+        isPast: isPast,
+      };
+    }
+
+    // ── Fetch launches from API ──
+    async function fetchLaunches() {
+      const baseUrl = 'https://ll.thespacedevs.com/2.2.0';
+      try {
+        const [upRes, pastRes] = await Promise.all([
+          fetch(`${baseUrl}/launch/upcoming/?format=json&limit=80&mode=detailed`),
+          fetch(`${baseUrl}/launch/previous/?format=json&limit=80&mode=detailed`)
+        ]);
+
+        if (upRes.ok) {
+          const upData = await upRes.json();
+          allLaunches.upcoming = (upData.results || []).map(r => parseLaunch(r, false));
+        }
+        if (pastRes.ok) {
+          const pastData = await pastRes.json();
+          allLaunches.past = (pastData.results || []).map(r => parseLaunch(r, true));
+        }
+      } catch (err) {
+        console.warn('API fetch failed, using fallback data:', err);
+        loadFallbackData();
+      }
+
+      if (allLaunches.upcoming.length === 0 && allLaunches.past.length === 0) {
+        loadFallbackData();
+      }
+
+      updateStats();
+    }
+
+    // ── Fallback data if API is down ──
+    function loadFallbackData() {
+      const fallbackLaunches = [
+        { name: 'Starlink Group 12-4', rocket: 'Falcon 9', provider: 'spacex', providerName: 'SpaceX', lat: 28.5729, lng: -80.649, padName: 'LC-39A', location: 'Kennedy Space Center, FL', status: 'Go for Launch', statusClass: 'status-success', isPast: false, orbit: 'Low Earth Orbit', missionType: 'Communications' },
+        { name: 'Artemis III', rocket: 'SLS Block 1', provider: 'nasa', providerName: 'NASA', lat: 28.5729, lng: -80.649, padName: 'LC-39B', location: 'Kennedy Space Center, FL', status: 'TBD', statusClass: 'status-tbd', isPast: false, orbit: 'Lunar Orbit', missionType: 'Human Spaceflight' },
+        { name: 'Starship Flight 10', rocket: 'Starship', provider: 'spacex', providerName: 'SpaceX', lat: 25.9972, lng: -97.1556, padName: 'Starbase', location: 'Boca Chica, TX', status: 'TBD', statusClass: 'status-tbd', isPast: false, orbit: 'Sub-Orbital', missionType: 'Test Flight' },
+        { name: 'Crew Dragon Crew-9', rocket: 'Falcon 9', provider: 'spacex', providerName: 'SpaceX', lat: 28.5729, lng: -80.649, padName: 'LC-39A', location: 'Kennedy Space Center, FL', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Human Spaceflight' },
+        { name: 'Starlink Group 10-12', rocket: 'Falcon 9', provider: 'spacex', providerName: 'SpaceX', lat: 34.742, lng: -120.5724, padName: 'SLC-4E', location: 'Vandenberg SFB, CA', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Communications' },
+        { name: 'GOES-U', rocket: 'Atlas V', provider: 'ula', providerName: 'United Launch Alliance', lat: 28.3922, lng: -80.6077, padName: 'SLC-41', location: 'Cape Canaveral SFS, FL', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Geostationary Orbit', missionType: 'Earth Science' },
+        { name: 'Soyuz MS-26', rocket: 'Soyuz 2.1a', provider: 'roscosmos', providerName: 'Roscosmos', lat: 45.965, lng: 63.305, padName: 'Site 31/6', location: 'Baikonur Cosmodrome', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Human Spaceflight' },
+        { name: 'Electron - Synspective', rocket: 'Electron', provider: 'other', providerName: 'Rocket Lab', lat: -39.2615, lng: 177.8649, padName: 'LC-1A', location: 'Mahia Peninsula, NZ', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Sun-Synchronous Orbit', missionType: 'Earth Science' },
+        { name: 'PSLV-C60', rocket: 'PSLV', provider: 'other', providerName: 'ISRO', lat: 13.7199, lng: 80.2304, padName: 'FLP', location: 'Satish Dhawan Space Centre', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Science' },
+        { name: 'Ariane 6 VF2', rocket: 'Ariane 6', provider: 'other', providerName: 'Arianespace', lat: 5.239, lng: -52.7689, padName: 'ELA-4', location: 'Guiana Space Centre', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Geostationary Transfer Orbit', missionType: 'Test Flight' },
+      ];
+
+      const now = new Date();
+      fallbackLaunches.forEach((l, i) => {
+        l.id = `fallback-${i}`;
+        l.date = l.isPast
+          ? new Date(now.getTime() - (i + 1) * 86400000 * 3)
+          : new Date(now.getTime() + (i + 1) * 86400000 * 7);
+        l.mission = null;
+      });
+
+      allLaunches.upcoming = fallbackLaunches.filter(l => !l.isPast);
+      allLaunches.past = fallbackLaunches.filter(l => l.isPast);
+    }
+
+    // ── Update Stats ──
+    function updateStats() {
+      const total = allLaunches.past.length + allLaunches.upcoming.length;
+      const successes = allLaunches.past.filter(l => l.status === 'Success').length;
+      const rate = allLaunches.past.length > 0 ? Math.round((successes / allLaunches.past.length) * 100) : 0;
+
+      document.getElementById('totalLaunches').textContent = total;
+      document.getElementById('upcomingCount').textContent = allLaunches.upcoming.length;
+      document.getElementById('successRate').textContent = rate + '%';
+    }
+
+    // ── Render launch list ──
+    function renderLaunches() {
+      const list = document.getElementById('launchList');
+      const search = document.getElementById('searchInput').value.toLowerCase();
+
+      let launches = currentTab === 'upcoming' ? allLaunches.upcoming : allLaunches.past;
+
+      // Filter
+      if (currentFilter !== 'all') {
+        launches = launches.filter(l => l.provider === currentFilter);
+      }
+
+      // Search
+      if (search) {
+        launches = launches.filter(l =>
+          l.name.toLowerCase().includes(search) ||
+          l.rocket.toLowerCase().includes(search) ||
+          l.providerName.toLowerCase().includes(search) ||
+          (l.location && l.location.toLowerCase().includes(search))
+        );
+      }
+
+      list.innerHTML = launches.map(l => {
+        const dateStr = l.date ? l.date.toLocaleDateString('en-US', {
+          month: 'short', day: 'numeric', year: 'numeric'
+        }) : 'TBD';
+
+        let countdown = '';
+        if (!l.isPast && l.date) {
+          const diff = l.date.getTime() - Date.now();
+          if (diff > 0) {
+            const days = Math.floor(diff / 86400000);
+            const hours = Math.floor((diff % 86400000) / 3600000);
+            countdown = `<div class="countdown">T-${days}d ${hours}h</div>`;
+          }
+        }
+
+        return `
+          <div class="launch-card ${l.provider} ${activeLaunchId === l.id ? 'active' : ''}"
+               data-id="${l.id}" onclick="selectLaunch('${l.id}')">
+            <div class="launch-provider">${l.providerName}</div>
+            <div class="launch-name">${l.name}</div>
+            <div class="launch-meta">
+              <span class="launch-date">📅 ${dateStr}</span>
+              <span class="launch-status ${l.statusClass}">${l.status}</span>
+            </div>
+            ${countdown}
+          </div>
+        `;
+      }).join('');
+
+      if (launches.length === 0) {
+        list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:#4a5580;">
+          <div style="font-size:2rem;margin-bottom:10px;">🔭</div>
+          <div>No launches found. Try a different filter!</div>
+        </div>`;
+      }
+    }
+
+    // ── Select a launch ──
+    function selectLaunch(id) {
+      const all = [...allLaunches.upcoming, ...allLaunches.past];
+      const launch = all.find(l => l.id === id);
+      if (!launch) return;
+
+      activeLaunchId = id;
+      renderLaunches();
+      showDetail(launch);
+      animateLaunchOnGlobe(launch);
+    }
+
+    // ── Show detail panel ──
+    function showDetail(launch) {
+      const panel = document.getElementById('detailPanel');
+      document.getElementById('detailProvider').textContent = launch.providerName;
+      document.getElementById('detailTitle').textContent = launch.name;
+
+      const dateStr = launch.date ? launch.date.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      }) : 'TBD';
+
+      let items = [
+        { label: 'Rocket', value: launch.rocket },
+        { label: 'Launch Date', value: dateStr },
+        { label: 'Launch Site', value: launch.padName },
+        { label: 'Location', value: launch.location },
+        { label: 'Status', value: launch.status },
+      ];
+
+      if (launch.orbit) items.push({ label: 'Target Orbit', value: launch.orbit });
+      if (launch.missionType) items.push({ label: 'Mission Type', value: launch.missionType });
+
+      document.getElementById('detailGrid').innerHTML = items.map(i => `
+        <div class="detail-item">
+          <div class="label">${i.label}</div>
+          <div class="value">${i.value}</div>
+        </div>
+      `).join('');
+
+      // Fun fact
+      const fact = funFacts[Math.floor(Math.random() * funFacts.length)];
+      document.getElementById('funFact').innerHTML = `🧠 <strong>Did you know?</strong> ${fact}`;
+
+      panel.classList.add('show');
+    }
+
+    // ── Animate launch on globe ──
+    function animateLaunchOnGlobe(launch) {
+      if (!launch.lat || !launch.lng) return;
+
+      // Pick a semi-random orbit target based on launch
+      const targetIdx = Math.abs(hashCode(launch.id)) % orbitTargets.length;
+      const target = orbitTargets[targetIdx];
+
+      // Create arc
+      const arc = {
+        startLat: launch.lat,
+        startLng: launch.lng,
+        endLat: target.lat + (Math.random() * 10 - 5),
+        endLng: target.lng + (Math.random() * 20 - 10),
+        color: launch.provider === 'spacex' ? ['#005288', '#a7d8f0']
+             : launch.provider === 'nasa' ? ['#fc3d21', '#ffa500']
+             : launch.provider === 'ula' ? ['#003366', '#6699cc']
+             : ['#7b61ff', '#c4b5ff'],
+        label: launch.name,
+      };
+
+      // Add to arcs
+      arcsData = [arc];
+      globe.arcsData(arcsData);
+
+      // Point camera at the launch site
+      globe.pointOfView({
+        lat: launch.lat,
+        lng: launch.lng,
+        altitude: 2.0
+      }, 1200);
+    }
+
+    function hashCode(str) {
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash |= 0;
+      }
+      return hash;
+    }
+
+    // ── Build globe ──
+    function initGlobe() {
+      const container = document.getElementById('globe-container');
+
+      globe = Globe()(container)
+        .globeImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/earth-blue-marble.jpg')
+        .bumpImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/earth-topology.png')
+        .backgroundImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/night-sky.png')
+        .atmosphereColor('#3a5ba0')
+        .atmosphereAltitude(0.2)
+        .width(window.innerWidth)
+        .height(window.innerHeight)
+
+        // Launch site points
+        .pointsData([])
+        .pointLat('lat')
+        .pointLng('lng')
+        .pointAltitude(0.01)
+        .pointRadius(0.4)
+        .pointColor('color')
+        .pointLabel('label')
+
+        // Trajectory arcs
+        .arcsData([])
+        .arcStartLat('startLat')
+        .arcStartLng('startLng')
+        .arcEndLat('endLat')
+        .arcEndLng('endLng')
+        .arcColor('color')
+        .arcDashLength(0.6)
+        .arcDashGap(0.3)
+        .arcDashAnimateTime(2000)
+        .arcStroke(0.5)
+        .arcAltitudeAutoScale(0.4)
+        .arcLabel('label')
+
+        // Labels
+        .labelsData([])
+        .labelLat('lat')
+        .labelLng('lng')
+        .labelText('text')
+        .labelSize(1.2)
+        .labelColor(() => '#c4b5ff')
+        .labelDotRadius(0.3)
+        .labelAltitude(0.015);
+
+      // Auto-rotate
+      globe.controls().autoRotate = true;
+      globe.controls().autoRotateSpeed = 0.4;
+      globe.controls().enableZoom = true;
+
+      // Resize
+      window.addEventListener('resize', () => {
+        globe.width(window.innerWidth).height(window.innerHeight);
+      });
+    }
+
+    // ── Update globe with launch data ──
+    function updateGlobeData() {
+      const all = [...allLaunches.upcoming, ...allLaunches.past];
+      const points = all
+        .filter(l => l.lat && l.lng)
+        .map(l => ({
+          lat: l.lat,
+          lng: l.lng,
+          color: l.provider === 'spacex' ? '#a7d8f0'
+               : l.provider === 'nasa' ? '#ff8a65'
+               : l.provider === 'ula' ? '#6699cc'
+               : l.provider === 'roscosmos' ? '#ef5350'
+               : '#c4b5ff',
+          label: `${l.providerName}: ${l.name}`,
+          id: l.id,
+        }));
+
+      // Remove duplicate locations (keep one per site)
+      const unique = [];
+      const seen = new Set();
+      for (const p of points) {
+        const key = `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          unique.push(p);
+        }
+      }
+
+      globe.pointsData(unique);
+
+      // Add labels for launch sites
+      const labels = unique.map(p => ({
+        lat: p.lat,
+        lng: p.lng,
+        text: p.label.split(':')[0], // Just provider name
+      }));
+      globe.labelsData(labels);
+
+      // Create initial arcs from recent launches
+      const recentPast = allLaunches.past.filter(l => l.lat && l.lng).slice(0, 6);
+      arcsData = recentPast.map((l, i) => {
+        const target = orbitTargets[i % orbitTargets.length];
+        return {
+          startLat: l.lat,
+          startLng: l.lng,
+          endLat: target.lat + (Math.random() * 6 - 3),
+          endLng: target.lng + (Math.random() * 12 - 6),
+          color: l.provider === 'spacex' ? ['rgba(0,82,136,0.6)', 'rgba(167,216,240,0.6)']
+               : l.provider === 'nasa' ? ['rgba(252,61,33,0.6)', 'rgba(255,165,0,0.6)']
+               : ['rgba(123,97,255,0.6)', 'rgba(196,181,255,0.6)'],
+          label: l.name,
+        };
+      });
+      globe.arcsData(arcsData);
+
+      // Click handler on points
+      globe.onPointClick(point => {
+        const launch = all.find(l => l.id === point.id);
+        if (launch) selectLaunch(launch.id);
+      });
+    }
+
+    // ── Event listeners ──
+    function setupEvents() {
+      // Tabs
+      document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          currentTab = tab.dataset.tab;
+          renderLaunches();
+        });
+      });
+
+      // Filters
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentFilter = btn.dataset.filter;
+          renderLaunches();
+        });
+      });
+
+      // Search
+      document.getElementById('searchInput').addEventListener('input', renderLaunches);
+
+      // Sidebar toggle
+      document.getElementById('sidebarToggle').addEventListener('click', () => {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('collapsed');
+        document.getElementById('sidebarToggle').textContent =
+          sb.classList.contains('collapsed') ? '▶' : '◀';
+      });
+
+      // Detail close
+      document.getElementById('detailClose').addEventListener('click', () => {
+        document.getElementById('detailPanel').classList.remove('show');
+        activeLaunchId = null;
+        renderLaunches();
+        // Reset arcs to default
+        updateGlobeData();
+        globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 1200);
+      });
+    }
+
+    // ── Countdown timer ──
+    function startCountdownTimer() {
+      setInterval(() => {
+        document.querySelectorAll('.countdown').forEach(el => {
+          // Update countdowns in place (re-render periodically)
+        });
+        if (currentTab === 'upcoming') {
+          renderLaunches();
+        }
+      }, 60000); // Every minute
+    }
+
+    // ── Main ──
+    async function main() {
+      createStars();
+      initGlobe();
+      setupEvents();
+
+      await fetchLaunches();
+
+      updateGlobeData();
+      renderLaunches();
+
+      // Hide loading screen
+      setTimeout(() => {
+        document.getElementById('loadingScreen').classList.add('hidden');
+      }, 2200);
+
+      startCountdownTimer();
+
+      // Set initial view
+      globe.pointOfView({ lat: 28, lng: -80, altitude: 2.5 }, 0);
+    }
+
+    main();
+  </script>
+</body>
+</html>
