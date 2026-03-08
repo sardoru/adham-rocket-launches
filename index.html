@@ -21,6 +21,7 @@
   <meta name="description" content="Explore every rocket launch on a 3D globe! Track SpaceX, NASA, and more with animated trajectories, countdowns, and fun space facts.">
   <meta name="theme-color" content="#0a0a1a">
 
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script src="https://unpkg.com/globe.gl@2.35.1/dist/globe.gl.min.js"></script>
   <script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
   <style>
@@ -948,8 +949,11 @@
         for (const rec of records) {
           const pos = propagateSat(rec, now);
           if (!pos) continue;
-          // Scale altitude: LEO ~400km → 0.06, GPS ~20200km → 3.17
-          const scaledAlt = pos.alt / EARTH_RADIUS_KM;
+          // Scale altitude for visual clarity
+          // LEO ~400km → ~0.06, MEO/GPS ~20200km → ~0.5 (compressed for visibility)
+          const rawAlt = pos.alt / EARTH_RADIUS_KM;
+          // Compress high altitudes so GPS doesn't fly off screen
+          const scaledAlt = rawAlt < 0.15 ? rawAlt + 0.02 : 0.15 + Math.sqrt(rawAlt - 0.15) * 0.3;
           positions.push({
             lat: pos.lat,
             lng: pos.lng,
@@ -957,7 +961,7 @@
             color: cfg.color,
             name: rec.name.trim(),
             constellation: key,
-            radius: key === 'iss' ? 0.55 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.22 : 0.08,
+            radius: key === 'iss' ? 0.7 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.35 : 0.15,
           });
           total++;
         }
@@ -969,10 +973,10 @@
       return positions;
     }
 
-    // Update satellite points on the globe using the built-in points layer
+    // Update satellites on the globe as floating sprites via customLayerData
     function updateSatellitesOnGlobe() {
       const positions = computeSatPositions();
-      globe.pointsData(positions);
+      globe.customLayerData(positions);
     }
 
     // Render satellite controls panel
@@ -1292,14 +1296,20 @@
         .labelSize(1.2).labelColor(() => '#c4b5ff')
         .labelDotRadius(0.3).labelAltitude(0.015)
 
-        // Satellite points
-        .pointsData([])
-        .pointLat('lat').pointLng('lng')
-        .pointAltitude('alt')
-        .pointRadius('radius')
-        .pointColor('color')
-        .pointLabel(d => `<div class="globe-tooltip">${d.name}<br><span style="color:${d.color}">${d.constellation.toUpperCase()}</span></div>`)
-        .pointsMerge(true);
+        // Satellites as floating sprites via custom layer
+        .customLayerData([])
+        .customThreeObject(d => {
+          const geo = new THREE.SphereGeometry(d.radius, 8, 8);
+          const mat = new THREE.MeshBasicMaterial({
+            color: d.color,
+            transparent: true,
+            opacity: d.constellation === 'iss' ? 1.0 : 0.75,
+          });
+          return new THREE.Mesh(geo, mat);
+        })
+        .customThreeObjectUpdate((obj, d) => {
+          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
+        });
 
       globe.controls().autoRotate = true;
       globe.controls().autoRotateSpeed = 0.4;
