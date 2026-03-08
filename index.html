@@ -973,10 +973,61 @@
       return positions;
     }
 
-    // Update satellites on the globe as floating sprites via customLayerData
+    // Compute orbital paths (past trail + future track) for a subset of satellites
+    function computeOrbitalPaths() {
+      const now = Date.now();
+      const paths = [];
+
+      // How many path points and time range per constellation type
+      const pathCfg = {
+        iss:     { count: 999, steps: 120, spanMin: 90 },  // all ISS, full orbit
+        starlink:{ count: 15,  steps: 60,  spanMin: 45 },  // sample 15
+        oneweb:  { count: 8,   steps: 60,  spanMin: 45 },
+        gps:     { count: 6,   steps: 80,  spanMin: 180 },  // higher orbit = longer period
+        glonass: { count: 4,   steps: 80,  spanMin: 180 },
+        galileo: { count: 4,   steps: 80,  spanMin: 180 },
+        iridium: { count: 6,   steps: 60,  spanMin: 50 },
+        science: { count: 4,   steps: 60,  spanMin: 50 },
+      };
+
+      for (const [key, cfg] of Object.entries(SAT_CONSTELLATIONS)) {
+        if (!cfg.enabled || !satRawData[key]) continue;
+        const pcfg = pathCfg[key] || { count: 5, steps: 60, spanMin: 45 };
+        const records = satRawData[key].slice(0, pcfg.count);
+
+        for (const rec of records) {
+          const coords = [];
+          const halfSpan = pcfg.spanMin / 2;
+          const stepMs = (pcfg.spanMin * 60000) / pcfg.steps;
+
+          for (let i = 0; i <= pcfg.steps; i++) {
+            const t = new Date(now - halfSpan * 60000 + i * stepMs);
+            const pos = propagateSat(rec, t);
+            if (!pos) continue;
+            const rawAlt = pos.alt / EARTH_RADIUS_KM;
+            const alt = rawAlt < 0.15 ? rawAlt + 0.02 : 0.15 + Math.sqrt(rawAlt - 0.15) * 0.3;
+            coords.push({ lat: pos.lat, lng: pos.lng, alt });
+          }
+
+          if (coords.length > 2) {
+            paths.push({ coords, color: cfg.color, constellation: key });
+          }
+        }
+      }
+      return paths;
+    }
+
+    // Update satellites on the globe as floating sprites + orbital paths
     function updateSatellitesOnGlobe() {
       const positions = computeSatPositions();
       globe.customLayerData(positions);
+    }
+
+    // Compute and render paths (called less frequently for performance)
+    let pathTimer = null;
+    function updateOrbitalPaths() {
+      const paths = computeOrbitalPaths();
+      globe.pathsData(paths);
     }
 
     // Render satellite controls panel
@@ -1020,20 +1071,31 @@
 
       // If enabling and no data yet, fetch it
       if (cfg.enabled && (!satRawData[key] || satRawData[key].length === 0)) {
-        fetchConstellation(key).then(() => updateSatellitesOnGlobe());
+        fetchConstellation(key).then(() => {
+          updateSatellitesOnGlobe();
+          updateOrbitalPaths();
+        });
       } else {
         updateSatellitesOnGlobe();
+        updateOrbitalPaths();
       }
     }
 
     // Start periodic satellite position updates
     function startSatUpdater() {
-      // Update every 3 seconds
+      // Update satellite dots every 3 seconds
       satUpdateTimer = setInterval(() => {
         if (satPositions.length > 0) {
           updateSatellitesOnGlobe();
         }
       }, 3000);
+
+      // Update orbital paths every 30 seconds (heavier computation)
+      pathTimer = setInterval(() => {
+        if (satPositions.length > 0) {
+          updateOrbitalPaths();
+        }
+      }, 30000);
     }
 
     // Load all enabled constellations
@@ -1042,6 +1104,7 @@
       // Fetch in parallel
       await Promise.allSettled(enabled.map(([key]) => fetchConstellation(key)));
       updateSatellitesOnGlobe();
+      updateOrbitalPaths();
       startSatUpdater();
     }
 
@@ -1295,6 +1358,25 @@
         .labelLat('lat').labelLng('lng').labelText('text')
         .labelSize(1.2).labelColor(() => '#c4b5ff')
         .labelDotRadius(0.3).labelAltitude(0.015)
+
+        // Orbital paths
+        .pathsData([])
+        .pathPoints('coords')
+        .pathPointLat('lat')
+        .pathPointLng('lng')
+        .pathPointAlt('alt')
+        .pathColor(d => {
+          const c = d.color;
+          // Gradient: faded at start (past), bright at middle (now), faded at end (future)
+          return d.constellation === 'iss'
+            ? [`${c}33`, `${c}aa`, c, `${c}aa`, `${c}33`]
+            : [`${c}15`, `${c}66`, `${c}88`, `${c}66`, `${c}15`];
+        })
+        .pathStroke(d => d.constellation === 'iss' ? 1.2 : 0.4)
+        .pathDashLength(0.01)
+        .pathDashGap(0)
+        .pathDashAnimateTime(0)
+        .pathTransitionDuration(0)
 
         // Satellites as floating sprites via custom layer
         .customLayerData([])
