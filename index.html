@@ -22,6 +22,7 @@
   <meta name="theme-color" content="#0a0a1a">
 
   <script src="https://unpkg.com/globe.gl@2.35.1/dist/globe.gl.min.js"></script>
+  <script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
 
@@ -177,10 +178,11 @@
       border-radius: 8px 8px 0 0;
       color: #6b7db3;
       font-family: 'Space Grotesk', sans-serif;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.3s;
+      white-space: nowrap;
     }
 
     .tab.active {
@@ -427,12 +429,13 @@
       height: 100%;
       background: linear-gradient(90deg, #7b61ff, #00d4ff);
       border-radius: 3px;
-      animation: loadBar 2s ease-in-out forwards;
+      animation: loadBar 2.5s ease-in-out forwards;
     }
 
     @keyframes loadBar {
       0% { width: 0%; }
-      50% { width: 70%; }
+      40% { width: 50%; }
+      80% { width: 85%; }
       100% { width: 100%; }
     }
 
@@ -505,6 +508,161 @@
       font-size: 0.8rem !important;
     }
 
+    /* ── Satellite Controls Panel ── */
+    .sat-panel {
+      position: fixed;
+      top: 74px;
+      left: 16px;
+      z-index: 80;
+      width: 260px;
+      background: linear-gradient(135deg, rgba(10,10,30,0.92) 0%, rgba(20,15,40,0.92) 100%);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(123,97,255,0.15);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s;
+    }
+
+    .sat-panel.collapsed {
+      transform: translateX(-220px);
+      opacity: 0.8;
+    }
+
+    .sat-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      cursor: pointer;
+    }
+
+    .sat-panel-header:hover { background: rgba(255,255,255,0.03); }
+
+    .sat-panel-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #c4b5ff;
+      text-transform: uppercase;
+    }
+
+    .sat-panel-toggle {
+      font-size: 0.8rem;
+      color: #6b7db3;
+      transition: transform 0.3s;
+    }
+
+    .sat-panel.collapsed .sat-panel-toggle { transform: rotate(180deg); }
+
+    .sat-panel-body {
+      padding: 8px 0;
+      max-height: 500px;
+      overflow-y: auto;
+    }
+
+    .sat-group {
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+      user-select: none;
+    }
+
+    .sat-group:hover { background: rgba(255,255,255,0.04); }
+
+    .sat-toggle {
+      width: 36px;
+      height: 20px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.1);
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+
+    .sat-toggle.on { background: rgba(123,97,255,0.5); }
+
+    .sat-toggle::after {
+      content: '';
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: #6b7db3;
+      transition: all 0.3s;
+    }
+
+    .sat-toggle.on::after {
+      left: 19px;
+      background: #c4b5ff;
+      box-shadow: 0 0 6px rgba(123,97,255,0.6);
+    }
+
+    .sat-color-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sat-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sat-label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #e0e0ff;
+    }
+
+    .sat-count {
+      font-size: 0.65rem;
+      color: #6b7db3;
+      font-family: 'Orbitron', monospace;
+    }
+
+    .sat-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.04);
+      margin: 4px 14px;
+    }
+
+    .sat-total-bar {
+      padding: 10px 14px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sat-total-label {
+      font-size: 0.65rem;
+      color: #6b7db3;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .sat-total-num {
+      font-family: 'Orbitron', monospace;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+
+    .sat-loading-msg {
+      padding: 6px 14px;
+      font-size: 0.7rem;
+      color: #6b7db3;
+      font-style: italic;
+    }
+
+    /* ISS special highlight */
+    .sat-group.iss-row .sat-label { color: #ffd54f; }
+
     /* Responsive */
     @media (max-width: 900px) {
       .sidebar {
@@ -529,6 +687,8 @@
       .detail-panel { width: 100%; display: none; }
       .header-stats { display: none; }
       .logo { font-size: 1rem; }
+      .sat-panel { width: 220px; top: 64px; left: 8px; }
+      .sat-panel.collapsed { transform: translateX(-182px); }
     }
   </style>
 </head>
@@ -560,8 +720,8 @@
         <div class="label">Upcoming</div>
       </div>
       <div class="stat-box">
-        <div class="num" id="successRate">--%</div>
-        <div class="label">Success Rate</div>
+        <div class="num" id="satCount">--</div>
+        <div class="label">Satellites Live</div>
       </div>
     </div>
   </div>
@@ -569,13 +729,28 @@
   <!-- Globe -->
   <div id="globe-container"></div>
 
+  <!-- Satellite Controls -->
+  <div class="sat-panel" id="satPanel">
+    <div class="sat-panel-header" id="satPanelHeader">
+      <span class="sat-panel-title">Live Satellites</span>
+      <span class="sat-panel-toggle">◀</span>
+    </div>
+    <div class="sat-panel-body" id="satPanelBody">
+      <div id="satGroupsList"></div>
+      <div class="sat-total-bar">
+        <span class="sat-total-label">Tracked</span>
+        <span class="sat-total-num" id="satTotalNum">0</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Sidebar -->
   <div class="sidebar" id="sidebar">
     <button class="sidebar-toggle" id="sidebarToggle">◀</button>
 
     <div class="tabs">
       <button class="tab active" data-tab="upcoming">🚀 Upcoming</button>
-      <button class="tab" data-tab="past">🌟 Past Launches</button>
+      <button class="tab" data-tab="past">🌟 Past</button>
     </div>
 
     <div class="search-box">
@@ -615,6 +790,26 @@
     let activeLaunchId = null;
     let arcsData = [];
 
+    // ── Satellite State ──
+    const EARTH_RADIUS_KM = 6371;
+    let satRawData = {};       // key -> array of TLE records
+    let satPositions = [];     // merged array of { lat, lng, alt, color, name, constellation }
+    let satUpdateTimer = null;
+
+    const SAT_CONSTELLATIONS = {
+      iss:      { label: 'ISS',              color: '#ffd54f', group: 'stations',      url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle', sample: null, enabled: true, icon: '🛸' },
+      starlink: { label: 'Starlink (SpaceX)', color: '#4fc3f7', group: 'starlink',     url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle', sample: 600,  enabled: true, icon: '🌐' },
+      oneweb:   { label: 'OneWeb',           color: '#ffb74d', group: 'oneweb',        url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=oneweb&FORMAT=tle',   sample: 250,  enabled: false, icon: '📡' },
+      gps:      { label: 'GPS (USA)',        color: '#81c784', group: 'gps-ops',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=tle',  sample: null, enabled: true, icon: '📍' },
+      glonass:  { label: 'GLONASS (Russia)', color: '#ef5350', group: 'glo-ops',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=tle',  sample: null, enabled: false, icon: '📍' },
+      galileo:  { label: 'Galileo (EU)',     color: '#7986cb', group: 'galileo',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle',  sample: null, enabled: false, icon: '📍' },
+      iridium:  { label: 'Iridium NEXT',    color: '#ce93d8', group: 'iridium-next',  url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-next&FORMAT=tle', sample: null, enabled: false, icon: '📞' },
+      science:  { label: 'Science (Hubble+)', color: '#ff8a65', group: 'science',      url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=science&FORMAT=tle',  sample: 30,   enabled: false, icon: '🔬' },
+      starship: { label: 'SpaceX Other',     color: '#80cbc4', group: 'SpaceX',        url: 'https://celestrak.org/NORAD/elements/gp.php?NAME=STARLINK&FORMAT=tle',  sample: 0,    enabled: false, skip: true }, // placeholder
+    };
+    // Remove the skip entry
+    delete SAT_CONSTELLATIONS.starship;
+
     // ── Fun Facts ──
     const funFacts = [
       "A Falcon 9 rocket reaches speeds over <strong>17,000 mph</strong> — fast enough to circle the Earth in about 90 minutes!",
@@ -625,16 +820,21 @@
       "A Falcon Heavy can produce <strong>5 million pounds</strong> of thrust at liftoff — equal to 18 Boeing 747s at full power!",
       "NASA's Space Launch System (SLS) is the <strong>most powerful rocket</strong> ever built!",
       "SpaceX has successfully landed boosters over <strong>300 times</strong>, making rockets reusable!",
-      "The Voyager 1 spacecraft, launched in 1977, is now over <strong>15 billion miles</strong> from Earth — the farthest human-made object!",
+      "The Voyager 1 spacecraft, launched in 1977, is now over <strong>15 billion miles</strong> from Earth!",
       "It takes about <strong>8.5 minutes</strong> for a rocket to reach orbit after launch!",
       "Astronauts on the ISS see <strong>16 sunrises and sunsets</strong> every single day!",
       "The exhaust from a rocket engine exits at about <strong>10 times the speed of sound</strong>!",
       "A spacesuit costs about <strong>$12 million</strong> to make!",
       "Rockets work in space because of Newton's Third Law: <strong>every action has an equal and opposite reaction</strong>!",
-      "The first liquid-fueled rocket was launched by Robert Goddard in <strong>1926</strong> and flew for only 2.5 seconds!"
+      "The first liquid-fueled rocket was launched by Robert Goddard in <strong>1926</strong> and flew for only 2.5 seconds!",
+      "There are over <strong>10,000 active satellites</strong> orbiting Earth right now!",
+      "SpaceX's Starlink constellation has over <strong>6,000 satellites</strong> — the largest ever!",
+      "GPS satellites orbit at <strong>12,550 miles</strong> altitude — about halfway to geostationary orbit!",
+      "The ISS is the size of a <strong>football field</strong> and weighs nearly 1 million pounds!",
+      "Light from the Sun takes <strong>8 minutes</strong> to reach Earth, but signals from GPS satellites take only 0.06 seconds!"
     ];
 
-    // ── Known Launch Sites (for fallback) ──
+    // ── Known Launch Sites ──
     const knownSites = {
       'Kennedy Space Center': { lat: 28.5729, lng: -80.6490 },
       'Cape Canaveral': { lat: 28.3922, lng: -80.6077 },
@@ -656,19 +856,213 @@
       'Semnan': { lat: 35.2346, lng: 53.9208 },
     };
 
-    // ── Simulated Orbit Targets ──
     const orbitTargets = [
-      { lat: 0, lng: -30, label: 'GEO Transfer' },
-      { lat: 51.6, lng: -10, label: 'ISS Orbit' },
-      { lat: -20, lng: 60, label: 'LEO East' },
-      { lat: 30, lng: 140, label: 'LEO Pacific' },
-      { lat: -45, lng: -90, label: 'Polar South' },
-      { lat: 60, lng: 100, label: 'Polar North' },
-      { lat: 10, lng: -160, label: 'GTO Pacific' },
-      { lat: -10, lng: 30, label: 'LEO Africa' },
+      { lat: 0, lng: -30 }, { lat: 51.6, lng: -10 },
+      { lat: -20, lng: 60 }, { lat: 30, lng: 140 },
+      { lat: -45, lng: -90 }, { lat: 60, lng: 100 },
+      { lat: 10, lng: -160 }, { lat: -10, lng: 30 },
     ];
 
-    // ── Init Stars ──
+    // ══════════════════════════════════════════
+    //  SATELLITE FUNCTIONS (SGP4 via satellite.js)
+    // ══════════════════════════════════════════
+
+    // Parse TLE text into array of { name, tle1, tle2 }
+    function parseTLEText(text) {
+      const lines = text.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const records = [];
+      let i = 0;
+      while (i < lines.length) {
+        if (lines[i + 1] && lines[i + 1].startsWith('1 ') && lines[i + 2] && lines[i + 2].startsWith('2 ')) {
+          records.push({ name: lines[i], tle1: lines[i + 1], tle2: lines[i + 2] });
+          i += 3;
+        } else if (lines[i].startsWith('1 ') && lines[i + 1] && lines[i + 1].startsWith('2 ')) {
+          records.push({ name: 'Unknown', tle1: lines[i], tle2: lines[i + 1] });
+          i += 2;
+        } else {
+          i++;
+        }
+      }
+      return records;
+    }
+
+    // Propagate a single TLE record to get { lat, lng, alt } at given date
+    function propagateSat(record, date) {
+      try {
+        const satrec = satellite.twoline2satrec(record.tle1, record.tle2);
+        const posVel = satellite.propagate(satrec, date);
+        if (!posVel.position) return null;
+        const gmst = satellite.gstime(date);
+        const geo = satellite.eciToGeodetic(posVel.position, gmst);
+        const lat = satellite.degreesLat(geo.latitude);
+        const lng = satellite.degreesLong(geo.longitude);
+        const alt = geo.height; // km
+        if (isNaN(lat) || isNaN(lng) || isNaN(alt)) return null;
+        return { lat, lng, alt };
+      } catch (e) {
+        return null;
+      }
+    }
+
+    // Fetch TLE data for a constellation
+    async function fetchConstellation(key) {
+      const cfg = SAT_CONSTELLATIONS[key];
+      if (!cfg) return;
+      try {
+        const res = await fetch(cfg.url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        let records = parseTLEText(text);
+
+        // Special: for ISS group (stations), filter to just ISS + Tiangong
+        if (key === 'iss') {
+          records = records.filter(r =>
+            /ISS|ZARYA|TIANHE|TIANGONG|CSS/i.test(r.name)
+          );
+        }
+
+        // Sample if needed
+        if (cfg.sample && records.length > cfg.sample) {
+          const step = Math.ceil(records.length / cfg.sample);
+          records = records.filter((_, i) => i % step === 0);
+        }
+
+        satRawData[key] = records;
+        updateSatCount(key);
+      } catch (err) {
+        console.warn(`Failed to fetch ${key} TLE:`, err);
+        satRawData[key] = [];
+      }
+    }
+
+    // Compute all enabled satellite positions for the current moment
+    function computeSatPositions() {
+      const now = new Date();
+      const positions = [];
+      let total = 0;
+
+      for (const [key, cfg] of Object.entries(SAT_CONSTELLATIONS)) {
+        if (!cfg.enabled || !satRawData[key]) continue;
+        const records = satRawData[key];
+
+        for (const rec of records) {
+          const pos = propagateSat(rec, now);
+          if (!pos) continue;
+          positions.push({
+            lat: pos.lat,
+            lng: pos.lng,
+            alt: pos.alt / EARTH_RADIUS_KM * 3, // scale for visibility
+            color: cfg.color,
+            name: rec.name.trim(),
+            constellation: key,
+            radius: key === 'iss' ? 1.0 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.35 : 0.12,
+          });
+          total++;
+        }
+      }
+
+      satPositions = positions;
+      document.getElementById('satCount').textContent = total.toLocaleString();
+      document.getElementById('satTotalNum').textContent = total.toLocaleString();
+      return positions;
+    }
+
+    // Update satellite points on the globe
+    function updateSatellitesOnGlobe() {
+      const positions = computeSatPositions();
+
+      // Merge with launch site rings data — satellites go to custom layer
+      globe
+        .customLayerData(positions)
+        .customThreeObject(d => {
+          const THREE = globe.scene().constructor.__proto__.constructor;
+          // Use simple sprite
+          const sprite = new window.THREE.Sprite(
+            new window.THREE.SpriteMaterial({
+              color: d.color,
+              transparent: true,
+              opacity: d.constellation === 'iss' ? 1.0 : 0.75,
+            })
+          );
+          const s = d.radius * 0.6;
+          sprite.scale.set(s, s, s);
+          return sprite;
+        })
+        .customThreeObjectUpdate((obj, d) => {
+          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
+        });
+    }
+
+    // Render satellite controls panel
+    function renderSatPanel() {
+      const container = document.getElementById('satGroupsList');
+      let html = '';
+
+      for (const [key, cfg] of Object.entries(SAT_CONSTELLATIONS)) {
+        const count = satRawData[key] ? satRawData[key].length : 0;
+        const countStr = count > 0 ? count.toLocaleString() : 'loading...';
+        const isISS = key === 'iss';
+
+        html += `
+          <div class="sat-group ${isISS ? 'iss-row' : ''}" data-key="${key}" onclick="toggleConstellation('${key}')">
+            <div class="sat-toggle ${cfg.enabled ? 'on' : ''}" id="sat-toggle-${key}"></div>
+            <div class="sat-color-dot" style="background:${cfg.color};box-shadow:0 0 6px ${cfg.color}55"></div>
+            <div class="sat-info">
+              <div class="sat-label">${cfg.icon} ${cfg.label}</div>
+              <div class="sat-count" id="sat-count-${key}">${countStr}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function updateSatCount(key) {
+      const el = document.getElementById(`sat-count-${key}`);
+      if (el && satRawData[key]) {
+        el.textContent = satRawData[key].length.toLocaleString() + ' satellites';
+      }
+    }
+
+    function toggleConstellation(key) {
+      const cfg = SAT_CONSTELLATIONS[key];
+      cfg.enabled = !cfg.enabled;
+
+      const toggle = document.getElementById(`sat-toggle-${key}`);
+      if (toggle) toggle.classList.toggle('on', cfg.enabled);
+
+      // If enabling and no data yet, fetch it
+      if (cfg.enabled && (!satRawData[key] || satRawData[key].length === 0)) {
+        fetchConstellation(key).then(() => updateSatellitesOnGlobe());
+      } else {
+        updateSatellitesOnGlobe();
+      }
+    }
+
+    // Start periodic satellite position updates
+    function startSatUpdater() {
+      // Update every 3 seconds
+      satUpdateTimer = setInterval(() => {
+        if (satPositions.length > 0) {
+          updateSatellitesOnGlobe();
+        }
+      }, 3000);
+    }
+
+    // Load all enabled constellations
+    async function loadSatellites() {
+      const enabled = Object.entries(SAT_CONSTELLATIONS).filter(([_, c]) => c.enabled);
+      // Fetch in parallel
+      await Promise.allSettled(enabled.map(([key]) => fetchConstellation(key)));
+      updateSatellitesOnGlobe();
+      startSatUpdater();
+    }
+
+    // ══════════════════════════════════════════
+    //  LAUNCH FUNCTIONS (unchanged logic)
+    // ══════════════════════════════════════════
+
     function createStars() {
       const container = document.getElementById('stars');
       for (let i = 0; i < 200; i++) {
@@ -685,7 +1079,6 @@
       }
     }
 
-    // ── Parse launch data from API ──
     function parseLaunch(raw, isPast) {
       const providerName = raw.launch_service_provider?.name || '';
       let provider = 'other';
@@ -694,8 +1087,7 @@
       else if (/united launch alliance|ula/i.test(providerName)) provider = 'ula';
       else if (/roscosmos|russian/i.test(providerName)) provider = 'roscosmos';
 
-      let statusText = 'TBD';
-      let statusClass = 'status-tbd';
+      let statusText = 'TBD', statusClass = 'status-tbd';
       if (isPast) {
         const s = raw.status?.abbrev || '';
         if (s === 'Success') { statusText = 'Success'; statusClass = 'status-success'; }
@@ -710,44 +1102,32 @@
         else { statusText = s || 'Upcoming'; statusClass = 'status-upcoming'; }
       }
 
-      // Get lat/lng from pad
       let lat = raw.pad?.latitude ? parseFloat(raw.pad.latitude) : null;
       let lng = raw.pad?.longitude ? parseFloat(raw.pad.longitude) : null;
-
-      // Fallback to known sites
       if (!lat || !lng || (lat === 0 && lng === 0)) {
         const padName = raw.pad?.name || raw.pad?.location?.name || '';
         for (const [key, val] of Object.entries(knownSites)) {
           if (padName.toLowerCase().includes(key.toLowerCase())) {
-            lat = val.lat;
-            lng = val.lng;
-            break;
+            lat = val.lat; lng = val.lng; break;
           }
         }
       }
 
       return {
-        id: raw.id,
-        name: raw.name || 'Unknown Mission',
+        id: raw.id, name: raw.name || 'Unknown Mission',
         rocket: raw.rocket?.configuration?.name || 'Unknown Rocket',
-        provider: provider,
-        providerName: providerName,
+        provider, providerName,
         date: raw.net ? new Date(raw.net) : null,
-        status: statusText,
-        statusClass: statusClass,
-        lat: lat,
-        lng: lng,
+        status: statusText, statusClass, lat, lng,
         padName: raw.pad?.name || 'Unknown Pad',
         location: raw.pad?.location?.name || 'Unknown Location',
         mission: raw.mission?.description || null,
         missionType: raw.mission?.type || null,
         orbit: raw.mission?.orbit?.name || null,
-        image: raw.image || null,
-        isPast: isPast,
+        image: raw.image || null, isPast,
       };
     }
 
-    // ── Fetch launches from API ──
     async function fetchLaunches() {
       const baseUrl = 'https://ll.thespacedevs.com/2.2.0';
       try {
@@ -755,30 +1135,24 @@
           fetch(`${baseUrl}/launch/upcoming/?format=json&limit=80&mode=detailed`),
           fetch(`${baseUrl}/launch/previous/?format=json&limit=80&mode=detailed`)
         ]);
-
         if (upRes.ok) {
-          const upData = await upRes.json();
-          allLaunches.upcoming = (upData.results || []).map(r => parseLaunch(r, false));
+          const d = await upRes.json();
+          allLaunches.upcoming = (d.results || []).map(r => parseLaunch(r, false));
         }
         if (pastRes.ok) {
-          const pastData = await pastRes.json();
-          allLaunches.past = (pastData.results || []).map(r => parseLaunch(r, true));
+          const d = await pastRes.json();
+          allLaunches.past = (d.results || []).map(r => parseLaunch(r, true));
         }
       } catch (err) {
-        console.warn('API fetch failed, using fallback data:', err);
+        console.warn('API fetch failed:', err);
         loadFallbackData();
       }
-
-      if (allLaunches.upcoming.length === 0 && allLaunches.past.length === 0) {
-        loadFallbackData();
-      }
-
+      if (allLaunches.upcoming.length === 0 && allLaunches.past.length === 0) loadFallbackData();
       updateStats();
     }
 
-    // ── Fallback data if API is down ──
     function loadFallbackData() {
-      const fallbackLaunches = [
+      const fb = [
         { name: 'Starlink Group 12-4', rocket: 'Falcon 9', provider: 'spacex', providerName: 'SpaceX', lat: 28.5729, lng: -80.649, padName: 'LC-39A', location: 'Kennedy Space Center, FL', status: 'Go for Launch', statusClass: 'status-success', isPast: false, orbit: 'Low Earth Orbit', missionType: 'Communications' },
         { name: 'Artemis III', rocket: 'SLS Block 1', provider: 'nasa', providerName: 'NASA', lat: 28.5729, lng: -80.649, padName: 'LC-39B', location: 'Kennedy Space Center, FL', status: 'TBD', statusClass: 'status-tbd', isPast: false, orbit: 'Lunar Orbit', missionType: 'Human Spaceflight' },
         { name: 'Starship Flight 10', rocket: 'Starship', provider: 'spacex', providerName: 'SpaceX', lat: 25.9972, lng: -97.1556, padName: 'Starbase', location: 'Boca Chica, TX', status: 'TBD', statusClass: 'status-tbd', isPast: false, orbit: 'Sub-Orbital', missionType: 'Test Flight' },
@@ -786,74 +1160,47 @@
         { name: 'Starlink Group 10-12', rocket: 'Falcon 9', provider: 'spacex', providerName: 'SpaceX', lat: 34.742, lng: -120.5724, padName: 'SLC-4E', location: 'Vandenberg SFB, CA', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Communications' },
         { name: 'GOES-U', rocket: 'Atlas V', provider: 'ula', providerName: 'United Launch Alliance', lat: 28.3922, lng: -80.6077, padName: 'SLC-41', location: 'Cape Canaveral SFS, FL', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Geostationary Orbit', missionType: 'Earth Science' },
         { name: 'Soyuz MS-26', rocket: 'Soyuz 2.1a', provider: 'roscosmos', providerName: 'Roscosmos', lat: 45.965, lng: 63.305, padName: 'Site 31/6', location: 'Baikonur Cosmodrome', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Human Spaceflight' },
-        { name: 'Electron - Synspective', rocket: 'Electron', provider: 'other', providerName: 'Rocket Lab', lat: -39.2615, lng: 177.8649, padName: 'LC-1A', location: 'Mahia Peninsula, NZ', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Sun-Synchronous Orbit', missionType: 'Earth Science' },
-        { name: 'PSLV-C60', rocket: 'PSLV', provider: 'other', providerName: 'ISRO', lat: 13.7199, lng: 80.2304, padName: 'FLP', location: 'Satish Dhawan Space Centre', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Low Earth Orbit', missionType: 'Science' },
-        { name: 'Ariane 6 VF2', rocket: 'Ariane 6', provider: 'other', providerName: 'Arianespace', lat: 5.239, lng: -52.7689, padName: 'ELA-4', location: 'Guiana Space Centre', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'Geostationary Transfer Orbit', missionType: 'Test Flight' },
+        { name: 'Electron - Synspective', rocket: 'Electron', provider: 'other', providerName: 'Rocket Lab', lat: -39.2615, lng: 177.8649, padName: 'LC-1A', location: 'Mahia Peninsula, NZ', status: 'Success', statusClass: 'status-success', isPast: true, orbit: 'SSO', missionType: 'Earth Science' },
       ];
-
       const now = new Date();
-      fallbackLaunches.forEach((l, i) => {
-        l.id = `fallback-${i}`;
-        l.date = l.isPast
-          ? new Date(now.getTime() - (i + 1) * 86400000 * 3)
-          : new Date(now.getTime() + (i + 1) * 86400000 * 7);
+      fb.forEach((l, i) => {
+        l.id = `fb-${i}`;
+        l.date = l.isPast ? new Date(now - (i+1)*86400000*3) : new Date(now.getTime() + (i+1)*86400000*7);
         l.mission = null;
       });
-
-      allLaunches.upcoming = fallbackLaunches.filter(l => !l.isPast);
-      allLaunches.past = fallbackLaunches.filter(l => l.isPast);
+      allLaunches.upcoming = fb.filter(l => !l.isPast);
+      allLaunches.past = fb.filter(l => l.isPast);
     }
 
-    // ── Update Stats ──
     function updateStats() {
       const total = allLaunches.past.length + allLaunches.upcoming.length;
-      const successes = allLaunches.past.filter(l => l.status === 'Success').length;
-      const rate = allLaunches.past.length > 0 ? Math.round((successes / allLaunches.past.length) * 100) : 0;
-
       document.getElementById('totalLaunches').textContent = total;
       document.getElementById('upcomingCount').textContent = allLaunches.upcoming.length;
-      document.getElementById('successRate').textContent = rate + '%';
     }
 
-    // ── Render launch list ──
     function renderLaunches() {
       const list = document.getElementById('launchList');
       const search = document.getElementById('searchInput').value.toLowerCase();
-
       let launches = currentTab === 'upcoming' ? allLaunches.upcoming : allLaunches.past;
-
-      // Filter
-      if (currentFilter !== 'all') {
-        launches = launches.filter(l => l.provider === currentFilter);
-      }
-
-      // Search
+      if (currentFilter !== 'all') launches = launches.filter(l => l.provider === currentFilter);
       if (search) {
         launches = launches.filter(l =>
-          l.name.toLowerCase().includes(search) ||
-          l.rocket.toLowerCase().includes(search) ||
-          l.providerName.toLowerCase().includes(search) ||
-          (l.location && l.location.toLowerCase().includes(search))
+          l.name.toLowerCase().includes(search) || l.rocket.toLowerCase().includes(search) ||
+          l.providerName.toLowerCase().includes(search) || (l.location && l.location.toLowerCase().includes(search))
         );
       }
-
       list.innerHTML = launches.map(l => {
-        const dateStr = l.date ? l.date.toLocaleDateString('en-US', {
-          month: 'short', day: 'numeric', year: 'numeric'
-        }) : 'TBD';
-
+        const dateStr = l.date ? l.date.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : 'TBD';
         let countdown = '';
         if (!l.isPast && l.date) {
           const diff = l.date.getTime() - Date.now();
           if (diff > 0) {
-            const days = Math.floor(diff / 86400000);
-            const hours = Math.floor((diff % 86400000) / 3600000);
+            const days = Math.floor(diff/86400000), hours = Math.floor((diff%86400000)/3600000);
             countdown = `<div class="countdown">T-${days}d ${hours}h</div>`;
           }
         }
-
         return `
-          <div class="launch-card ${l.provider} ${activeLaunchId === l.id ? 'active' : ''}"
+          <div class="launch-card ${l.provider} ${activeLaunchId===l.id?'active':''}"
                data-id="${l.id}" onclick="selectLaunch('${l.id}')">
             <div class="launch-provider">${l.providerName}</div>
             <div class="launch-name">${l.name}</div>
@@ -862,41 +1209,31 @@
               <span class="launch-status ${l.statusClass}">${l.status}</span>
             </div>
             ${countdown}
-          </div>
-        `;
+          </div>`;
       }).join('');
-
       if (launches.length === 0) {
         list.innerHTML = `<div style="text-align:center;padding:40px 20px;color:#4a5580;">
           <div style="font-size:2rem;margin-bottom:10px;">🔭</div>
-          <div>No launches found. Try a different filter!</div>
-        </div>`;
+          <div>No launches found. Try a different filter!</div></div>`;
       }
     }
 
-    // ── Select a launch ──
     function selectLaunch(id) {
       const all = [...allLaunches.upcoming, ...allLaunches.past];
       const launch = all.find(l => l.id === id);
       if (!launch) return;
-
       activeLaunchId = id;
       renderLaunches();
       showDetail(launch);
       animateLaunchOnGlobe(launch);
     }
 
-    // ── Show detail panel ──
     function showDetail(launch) {
-      const panel = document.getElementById('detailPanel');
       document.getElementById('detailProvider').textContent = launch.providerName;
       document.getElementById('detailTitle').textContent = launch.name;
-
       const dateStr = launch.date ? launch.date.toLocaleDateString('en-US', {
-        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+        weekday:'long', month:'long', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit'
       }) : 'TBD';
-
       let items = [
         { label: 'Rocket', value: launch.rocket },
         { label: 'Launch Date', value: dateStr },
@@ -904,72 +1241,43 @@
         { label: 'Location', value: launch.location },
         { label: 'Status', value: launch.status },
       ];
-
       if (launch.orbit) items.push({ label: 'Target Orbit', value: launch.orbit });
       if (launch.missionType) items.push({ label: 'Mission Type', value: launch.missionType });
-
-      document.getElementById('detailGrid').innerHTML = items.map(i => `
-        <div class="detail-item">
-          <div class="label">${i.label}</div>
-          <div class="value">${i.value}</div>
-        </div>
-      `).join('');
-
-      // Fun fact
+      document.getElementById('detailGrid').innerHTML = items.map(i =>
+        `<div class="detail-item"><div class="label">${i.label}</div><div class="value">${i.value}</div></div>`
+      ).join('');
       const fact = funFacts[Math.floor(Math.random() * funFacts.length)];
       document.getElementById('funFact').innerHTML = `🧠 <strong>Did you know?</strong> ${fact}`;
-
-      panel.classList.add('show');
+      document.getElementById('detailPanel').classList.add('show');
     }
 
-    // ── Animate launch on globe ──
     function animateLaunchOnGlobe(launch) {
       if (!launch.lat || !launch.lng) return;
-
-      // Pick a semi-random orbit target based on launch
-      const targetIdx = Math.abs(hashCode(launch.id)) % orbitTargets.length;
+      const targetIdx = Math.abs(hashCode(String(launch.id))) % orbitTargets.length;
       const target = orbitTargets[targetIdx];
-
-      // Create arc
-      const arc = {
-        startLat: launch.lat,
-        startLng: launch.lng,
-        endLat: target.lat + (Math.random() * 10 - 5),
-        endLng: target.lng + (Math.random() * 20 - 10),
-        color: launch.provider === 'spacex' ? ['#005288', '#a7d8f0']
-             : launch.provider === 'nasa' ? ['#fc3d21', '#ffa500']
-             : launch.provider === 'ula' ? ['#003366', '#6699cc']
-             : ['#7b61ff', '#c4b5ff'],
+      arcsData = [{
+        startLat: launch.lat, startLng: launch.lng,
+        endLat: target.lat + (Math.random()*10-5),
+        endLng: target.lng + (Math.random()*20-10),
+        color: launch.provider==='spacex' ? ['#005288','#a7d8f0']
+             : launch.provider==='nasa' ? ['#fc3d21','#ffa500']
+             : launch.provider==='ula' ? ['#003366','#6699cc']
+             : ['#7b61ff','#c4b5ff'],
         label: launch.name,
-      };
-
-      // Add to arcs
-      arcsData = [arc];
+      }];
       globe.arcsData(arcsData);
-
-      // Point camera at the launch site
-      globe.pointOfView({
-        lat: launch.lat,
-        lng: launch.lng,
-        altitude: 2.0
-      }, 1200);
+      globe.pointOfView({ lat: launch.lat, lng: launch.lng, altitude: 2.0 }, 1200);
     }
 
     function hashCode(str) {
       let hash = 0;
-      for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash |= 0;
-      }
+      for (let i = 0; i < str.length; i++) { hash = ((hash<<5)-hash)+str.charCodeAt(i); hash |= 0; }
       return hash;
     }
 
     // ── Build globe ──
     function initGlobe() {
-      const container = document.getElementById('globe-container');
-
-      globe = Globe()(container)
+      globe = Globe()(document.getElementById('globe-container'))
         .globeImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/earth-blue-marble.jpg')
         .bumpImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/earth-topology.png')
         .backgroundImageUrl('https://unpkg.com/three-globe@2.35.0/example/img/night-sky.png')
@@ -978,115 +1286,112 @@
         .width(window.innerWidth)
         .height(window.innerHeight)
 
-        // Launch site points
-        .pointsData([])
-        .pointLat('lat')
-        .pointLng('lng')
-        .pointAltitude(0.01)
-        .pointRadius(0.4)
-        .pointColor('color')
-        .pointLabel('label')
+        // Launch site rings
+        .ringsData([])
+        .ringLat('lat')
+        .ringLng('lng')
+        .ringAltitude(0.005)
+        .ringColor('color')
+        .ringMaxRadius('maxR')
+        .ringPropagationSpeed('speed')
+        .ringRepeatPeriod('repeat')
 
         // Trajectory arcs
         .arcsData([])
-        .arcStartLat('startLat')
-        .arcStartLng('startLng')
-        .arcEndLat('endLat')
-        .arcEndLng('endLng')
+        .arcStartLat('startLat').arcStartLng('startLng')
+        .arcEndLat('endLat').arcEndLng('endLng')
         .arcColor('color')
-        .arcDashLength(0.6)
-        .arcDashGap(0.3)
-        .arcDashAnimateTime(2000)
-        .arcStroke(0.5)
-        .arcAltitudeAutoScale(0.4)
-        .arcLabel('label')
+        .arcDashLength(0.6).arcDashGap(0.3).arcDashAnimateTime(2000)
+        .arcStroke(0.5).arcAltitudeAutoScale(0.4).arcLabel('label')
 
-        // Labels
+        // Labels for launch sites
         .labelsData([])
-        .labelLat('lat')
-        .labelLng('lng')
-        .labelText('text')
-        .labelSize(1.2)
-        .labelColor(() => '#c4b5ff')
-        .labelDotRadius(0.3)
-        .labelAltitude(0.015);
+        .labelLat('lat').labelLng('lng').labelText('text')
+        .labelSize(1.2).labelColor(() => '#c4b5ff')
+        .labelDotRadius(0.3).labelAltitude(0.015)
 
-      // Auto-rotate
+        // Custom layer for satellites
+        .customLayerData([])
+        .customThreeObject(d => {
+          const sprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              color: d.color,
+              transparent: true,
+              opacity: d.constellation === 'iss' ? 1.0 : 0.7,
+              depthWrite: false,
+            })
+          );
+          const s = d.radius * 0.7;
+          sprite.scale.set(s, s, s);
+          return sprite;
+        })
+        .customThreeObjectUpdate((obj, d) => {
+          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
+        });
+
       globe.controls().autoRotate = true;
       globe.controls().autoRotateSpeed = 0.4;
       globe.controls().enableZoom = true;
 
-      // Resize
+      // Access THREE from the globe's scene
+      window.THREE = globe.scene().constructor.__proto__.constructor || window.THREE;
+
       window.addEventListener('resize', () => {
         globe.width(window.innerWidth).height(window.innerHeight);
       });
     }
 
-    // ── Update globe with launch data ──
+    // Update globe with launch data (rings + arcs + labels)
     function updateGlobeData() {
       const all = [...allLaunches.upcoming, ...allLaunches.past];
-      const points = all
-        .filter(l => l.lat && l.lng)
-        .map(l => ({
-          lat: l.lat,
-          lng: l.lng,
-          color: l.provider === 'spacex' ? '#a7d8f0'
-               : l.provider === 'nasa' ? '#ff8a65'
-               : l.provider === 'ula' ? '#6699cc'
-               : l.provider === 'roscosmos' ? '#ef5350'
-               : '#c4b5ff',
-          label: `${l.providerName}: ${l.name}`,
-          id: l.id,
-        }));
 
-      // Remove duplicate locations (keep one per site)
-      const unique = [];
-      const seen = new Set();
-      for (const p of points) {
-        const key = `${p.lat.toFixed(2)},${p.lng.toFixed(2)}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          unique.push(p);
+      // Unique launch sites as pulsing rings
+      const ringMap = new Map();
+      for (const l of all) {
+        if (!l.lat || !l.lng) continue;
+        const key = `${l.lat.toFixed(2)},${l.lng.toFixed(2)}`;
+        if (!ringMap.has(key)) {
+          const color = l.provider==='spacex' ? '#a7d8f0'
+                      : l.provider==='nasa' ? '#ff8a65'
+                      : l.provider==='ula' ? '#6699cc'
+                      : l.provider==='roscosmos' ? '#ef5350' : '#c4b5ff';
+          ringMap.set(key, {
+            lat: l.lat, lng: l.lng,
+            color: () => color,
+            maxR: 1.5, speed: 2, repeat: 1200,
+            label: `${l.providerName}: ${l.name}`,
+            id: l.id,
+          });
         }
       }
+      const rings = [...ringMap.values()];
+      globe.ringsData(rings);
 
-      globe.pointsData(unique);
-
-      // Add labels for launch sites
-      const labels = unique.map(p => ({
-        lat: p.lat,
-        lng: p.lng,
-        text: p.label.split(':')[0], // Just provider name
+      // Labels
+      const labels = rings.map(r => ({
+        lat: r.lat, lng: r.lng,
+        text: r.label.split(':')[0],
       }));
       globe.labelsData(labels);
 
-      // Create initial arcs from recent launches
+      // Initial arcs
       const recentPast = allLaunches.past.filter(l => l.lat && l.lng).slice(0, 6);
       arcsData = recentPast.map((l, i) => {
-        const target = orbitTargets[i % orbitTargets.length];
+        const t = orbitTargets[i % orbitTargets.length];
         return {
-          startLat: l.lat,
-          startLng: l.lng,
-          endLat: target.lat + (Math.random() * 6 - 3),
-          endLng: target.lng + (Math.random() * 12 - 6),
-          color: l.provider === 'spacex' ? ['rgba(0,82,136,0.6)', 'rgba(167,216,240,0.6)']
-               : l.provider === 'nasa' ? ['rgba(252,61,33,0.6)', 'rgba(255,165,0,0.6)']
-               : ['rgba(123,97,255,0.6)', 'rgba(196,181,255,0.6)'],
+          startLat: l.lat, startLng: l.lng,
+          endLat: t.lat+(Math.random()*6-3), endLng: t.lng+(Math.random()*12-6),
+          color: l.provider==='spacex' ? ['rgba(0,82,136,0.6)','rgba(167,216,240,0.6)']
+               : l.provider==='nasa' ? ['rgba(252,61,33,0.6)','rgba(255,165,0,0.6)']
+               : ['rgba(123,97,255,0.6)','rgba(196,181,255,0.6)'],
           label: l.name,
         };
       });
       globe.arcsData(arcsData);
-
-      // Click handler on points
-      globe.onPointClick(point => {
-        const launch = all.find(l => l.id === point.id);
-        if (launch) selectLaunch(launch.id);
-      });
     }
 
-    // ── Event listeners ──
+    // ── Events ──
     function setupEvents() {
-      // Tabs
       document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
           document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1096,7 +1401,6 @@
         });
       });
 
-      // Filters
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -1106,38 +1410,32 @@
         });
       });
 
-      // Search
       document.getElementById('searchInput').addEventListener('input', renderLaunches);
 
-      // Sidebar toggle
       document.getElementById('sidebarToggle').addEventListener('click', () => {
         const sb = document.getElementById('sidebar');
         sb.classList.toggle('collapsed');
-        document.getElementById('sidebarToggle').textContent =
-          sb.classList.contains('collapsed') ? '▶' : '◀';
+        document.getElementById('sidebarToggle').textContent = sb.classList.contains('collapsed') ? '▶' : '◀';
       });
 
-      // Detail close
       document.getElementById('detailClose').addEventListener('click', () => {
         document.getElementById('detailPanel').classList.remove('show');
         activeLaunchId = null;
         renderLaunches();
-        // Reset arcs to default
         updateGlobeData();
         globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 1200);
       });
+
+      // Sat panel toggle
+      document.getElementById('satPanelHeader').addEventListener('click', () => {
+        document.getElementById('satPanel').classList.toggle('collapsed');
+      });
     }
 
-    // ── Countdown timer ──
     function startCountdownTimer() {
       setInterval(() => {
-        document.querySelectorAll('.countdown').forEach(el => {
-          // Update countdowns in place (re-render periodically)
-        });
-        if (currentTab === 'upcoming') {
-          renderLaunches();
-        }
-      }, 60000); // Every minute
+        if (currentTab === 'upcoming') renderLaunches();
+      }, 60000);
     }
 
     // ── Main ──
@@ -1145,20 +1443,22 @@
       createStars();
       initGlobe();
       setupEvents();
+      renderSatPanel();
 
-      await fetchLaunches();
+      // Fetch launches and satellites in parallel
+      const [_launches] = await Promise.allSettled([
+        fetchLaunches(),
+        loadSatellites(),
+      ]);
 
       updateGlobeData();
       renderLaunches();
 
-      // Hide loading screen
       setTimeout(() => {
         document.getElementById('loadingScreen').classList.add('hidden');
-      }, 2200);
+      }, 2800);
 
       startCountdownTimer();
-
-      // Set initial view
       globe.pointOfView({ lat: 28, lng: -80, altitude: 2.5 }, 0);
     }
 
