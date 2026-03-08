@@ -948,14 +948,16 @@
         for (const rec of records) {
           const pos = propagateSat(rec, now);
           if (!pos) continue;
+          // Scale altitude: LEO ~400km → 0.06, GPS ~20200km → 3.17
+          const scaledAlt = pos.alt / EARTH_RADIUS_KM;
           positions.push({
             lat: pos.lat,
             lng: pos.lng,
-            alt: pos.alt / EARTH_RADIUS_KM * 3, // scale for visibility
+            alt: scaledAlt,
             color: cfg.color,
             name: rec.name.trim(),
             constellation: key,
-            radius: key === 'iss' ? 1.0 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.35 : 0.12,
+            radius: key === 'iss' ? 0.55 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.22 : 0.08,
           });
           total++;
         }
@@ -967,30 +969,10 @@
       return positions;
     }
 
-    // Update satellite points on the globe
+    // Update satellite points on the globe using the built-in points layer
     function updateSatellitesOnGlobe() {
       const positions = computeSatPositions();
-
-      // Merge with launch site rings data — satellites go to custom layer
-      globe
-        .customLayerData(positions)
-        .customThreeObject(d => {
-          const THREE = globe.scene().constructor.__proto__.constructor;
-          // Use simple sprite
-          const sprite = new window.THREE.Sprite(
-            new window.THREE.SpriteMaterial({
-              color: d.color,
-              transparent: true,
-              opacity: d.constellation === 'iss' ? 1.0 : 0.75,
-            })
-          );
-          const s = d.radius * 0.6;
-          sprite.scale.set(s, s, s);
-          return sprite;
-        })
-        .customThreeObjectUpdate((obj, d) => {
-          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
-        });
+      globe.pointsData(positions);
     }
 
     // Render satellite controls panel
@@ -1310,31 +1292,18 @@
         .labelSize(1.2).labelColor(() => '#c4b5ff')
         .labelDotRadius(0.3).labelAltitude(0.015)
 
-        // Custom layer for satellites
-        .customLayerData([])
-        .customThreeObject(d => {
-          const sprite = new THREE.Sprite(
-            new THREE.SpriteMaterial({
-              color: d.color,
-              transparent: true,
-              opacity: d.constellation === 'iss' ? 1.0 : 0.7,
-              depthWrite: false,
-            })
-          );
-          const s = d.radius * 0.7;
-          sprite.scale.set(s, s, s);
-          return sprite;
-        })
-        .customThreeObjectUpdate((obj, d) => {
-          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
-        });
+        // Satellite points
+        .pointsData([])
+        .pointLat('lat').pointLng('lng')
+        .pointAltitude('alt')
+        .pointRadius('radius')
+        .pointColor('color')
+        .pointLabel(d => `<div class="globe-tooltip">${d.name}<br><span style="color:${d.color}">${d.constellation.toUpperCase()}</span></div>`)
+        .pointsMerge(true);
 
       globe.controls().autoRotate = true;
       globe.controls().autoRotateSpeed = 0.4;
       globe.controls().enableZoom = true;
-
-      // Access THREE from the globe's scene
-      window.THREE = globe.scene().constructor.__proto__.constructor || window.THREE;
 
       window.addEventListener('resize', () => {
         globe.width(window.innerWidth).height(window.innerHeight);
