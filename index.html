@@ -798,18 +798,19 @@
     let satUpdateTimer = null;
 
     const SAT_CONSTELLATIONS = {
-      iss:      { label: 'ISS',              color: '#ffd54f', group: 'stations',      url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle', sample: null, enabled: true, icon: '🛸' },
-      starlink: { label: 'Starlink (SpaceX)', color: '#4fc3f7', group: 'starlink',     url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle', sample: 600,  enabled: true, icon: '🌐' },
-      oneweb:   { label: 'OneWeb',           color: '#ffb74d', group: 'oneweb',        url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=oneweb&FORMAT=tle',   sample: 250,  enabled: false, icon: '📡' },
-      gps:      { label: 'GPS (USA)',        color: '#81c784', group: 'gps-ops',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=tle',  sample: null, enabled: true, icon: '📍' },
+      iss:      { label: 'ISS',              color: '#ffd54f', group: 'stations',      url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=stations&FORMAT=tle', sample: null, enabled: true,  icon: '🛸' },
+      starlink: { label: 'Starlink (SpaceX)', color: '#4fc3f7', group: 'starlink',     url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle', sample: null, enabled: true,  icon: '🌐' },
+      oneweb:   { label: 'OneWeb',           color: '#ffb74d', group: 'oneweb',        url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=oneweb&FORMAT=tle',   sample: null, enabled: false, icon: '📡' },
+      gps:      { label: 'GPS (USA)',        color: '#81c784', group: 'gps-ops',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=gps-ops&FORMAT=tle',  sample: null, enabled: true,  icon: '📍' },
       glonass:  { label: 'GLONASS (Russia)', color: '#ef5350', group: 'glo-ops',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=glo-ops&FORMAT=tle',  sample: null, enabled: false, icon: '📍' },
       galileo:  { label: 'Galileo (EU)',     color: '#7986cb', group: 'galileo',       url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=galileo&FORMAT=tle',  sample: null, enabled: false, icon: '📍' },
       iridium:  { label: 'Iridium NEXT',    color: '#ce93d8', group: 'iridium-next',  url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-next&FORMAT=tle', sample: null, enabled: false, icon: '📞' },
       science:  { label: 'Science (Hubble+)', color: '#ff8a65', group: 'science',      url: 'https://celestrak.org/NORAD/elements/gp.php?GROUP=science&FORMAT=tle',  sample: 30,   enabled: false, icon: '🔬' },
-      starship: { label: 'SpaceX Other',     color: '#80cbc4', group: 'SpaceX',        url: 'https://celestrak.org/NORAD/elements/gp.php?NAME=STARLINK&FORMAT=tle',  sample: 0,    enabled: false, skip: true }, // placeholder
     };
-    // Remove the skip entry
-    delete SAT_CONSTELLATIONS.starship;
+
+    // Direct THREE.js objects for efficient bulk rendering
+    let satPointSystems = {};   // key -> THREE.Points
+    let satPathLines = {};      // key -> THREE.LineSegments
 
     // ── Fun Facts ──
     const funFacts = [
@@ -936,98 +937,190 @@
       }
     }
 
-    // Compute all enabled satellite positions for the current moment
-    function computeSatPositions() {
+    // Scale altitude for visual clarity
+    function scaleAlt(altKm) {
+      const raw = altKm / EARTH_RADIUS_KM;
+      return raw < 0.15 ? raw + 0.02 : 0.15 + Math.sqrt(raw - 0.15) * 0.3;
+    }
+
+    // Convert lat/lng/alt to 3D position (globe radius = 100 in globe.gl)
+    function geoTo3D(lat, lng, alt) {
+      const R = 100; // globe.gl globe radius
+      const r = R * (1 + alt);
+      const phi = (90 - lat) * Math.PI / 180;
+      const theta = (lng + 180) * Math.PI / 180;
+      return {
+        x: -r * Math.sin(phi) * Math.cos(theta),
+        y: r * Math.cos(phi),
+        z: r * Math.sin(phi) * Math.sin(theta),
+      };
+    }
+
+    // Build or update a THREE.Points particle system for a constellation's dots
+    function updateSatDots(key) {
+      const cfg = SAT_CONSTELLATIONS[key];
+      if (!cfg.enabled || !satRawData[key] || satRawData[key].length === 0) {
+        // Remove if exists
+        if (satPointSystems[key]) {
+          globe.scene().remove(satPointSystems[key]);
+          satPointSystems[key].geometry.dispose();
+          satPointSystems[key].material.dispose();
+          delete satPointSystems[key];
+        }
+        return 0;
+      }
+
       const now = new Date();
+      const records = satRawData[key];
       const positions = [];
-      let total = 0;
 
-      for (const [key, cfg] of Object.entries(SAT_CONSTELLATIONS)) {
-        if (!cfg.enabled || !satRawData[key]) continue;
-        const records = satRawData[key];
+      for (const rec of records) {
+        const pos = propagateSat(rec, now);
+        if (!pos) continue;
+        const alt = scaleAlt(pos.alt);
+        const p = geoTo3D(pos.lat, pos.lng, alt);
+        positions.push(p.x, p.y, p.z);
+      }
 
-        for (const rec of records) {
-          const pos = propagateSat(rec, now);
-          if (!pos) continue;
-          // Scale altitude for visual clarity
-          // LEO ~400km → ~0.06, MEO/GPS ~20200km → ~0.5 (compressed for visibility)
-          const rawAlt = pos.alt / EARTH_RADIUS_KM;
-          // Compress high altitudes so GPS doesn't fly off screen
-          const scaledAlt = rawAlt < 0.15 ? rawAlt + 0.02 : 0.15 + Math.sqrt(rawAlt - 0.15) * 0.3;
-          positions.push({
-            lat: pos.lat,
-            lng: pos.lng,
-            alt: scaledAlt,
-            color: cfg.color,
-            name: rec.name.trim(),
-            constellation: key,
-            radius: key === 'iss' ? 0.7 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 0.35 : 0.15,
-          });
-          total++;
+      const count = positions.length / 3;
+      if (count === 0) return 0;
+
+      const posArray = new Float32Array(positions);
+
+      if (satPointSystems[key]) {
+        // Update existing geometry
+        const geo = satPointSystems[key].geometry;
+        if (geo.attributes.position.count !== count) {
+          geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        } else {
+          geo.attributes.position.array.set(posArray);
+        }
+        geo.attributes.position.needsUpdate = true;
+      } else {
+        // Create new particle system
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+        const size = key === 'iss' ? 4.0
+                   : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 2.0
+                   : 0.8;
+
+        const mat = new THREE.PointsMaterial({
+          color: cfg.color,
+          size: size,
+          transparent: true,
+          opacity: key === 'iss' ? 1.0 : 0.8,
+          sizeAttenuation: true,
+          depthWrite: false,
+        });
+
+        const points = new THREE.Points(geo, mat);
+        points.renderOrder = 10;
+        globe.scene().add(points);
+        satPointSystems[key] = points;
+      }
+
+      return count;
+    }
+
+    // Build or update THREE.LineSegments for a constellation's orbital paths
+    function updateSatPaths(key) {
+      const cfg = SAT_CONSTELLATIONS[key];
+      if (!cfg.enabled || !satRawData[key] || satRawData[key].length === 0) {
+        if (satPathLines[key]) {
+          globe.scene().remove(satPathLines[key]);
+          satPathLines[key].geometry.dispose();
+          satPathLines[key].material.dispose();
+          delete satPathLines[key];
+        }
+        return;
+      }
+
+      const now = Date.now();
+      const records = satRawData[key];
+
+      // Path config per constellation
+      const steps = key === 'iss' ? 200 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 100 : 40;
+      const spanMin = key === 'iss' ? 92 : (key === 'gps' || key === 'glonass' || key === 'galileo') ? 360 : 46;
+      const halfSpan = spanMin / 2;
+      const stepMs = (spanMin * 60000) / steps;
+
+      const linePositions = [];
+
+      for (const rec of records) {
+        let prevPoint = null;
+        for (let i = 0; i <= steps; i++) {
+          const t = new Date(now - halfSpan * 60000 + i * stepMs);
+          const pos = propagateSat(rec, t);
+          if (!pos) { prevPoint = null; continue; }
+
+          const alt = scaleAlt(pos.alt);
+          const p = geoTo3D(pos.lat, pos.lng, alt);
+
+          if (prevPoint) {
+            // Check for longitude wrap (> 180 deg jump) — break the line there
+            const dx = p.x - prevPoint.x;
+            const dy = p.y - prevPoint.y;
+            const dz = p.z - prevPoint.z;
+            const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (dist < 50) { // reasonable threshold for continuity
+              linePositions.push(prevPoint.x, prevPoint.y, prevPoint.z);
+              linePositions.push(p.x, p.y, p.z);
+            }
+          }
+          prevPoint = p;
         }
       }
 
-      satPositions = positions;
+      if (linePositions.length === 0) return;
+
+      const posArray = new Float32Array(linePositions);
+
+      if (satPathLines[key]) {
+        const geo = satPathLines[key].geometry;
+        geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        geo.attributes.position.needsUpdate = true;
+        geo.setDrawRange(0, posArray.length / 3);
+      } else {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+
+        const opacity = key === 'iss' ? 0.5 : key === 'starlink' ? 0.08 : 0.2;
+        const mat = new THREE.LineBasicMaterial({
+          color: cfg.color,
+          transparent: true,
+          opacity: opacity,
+          depthWrite: false,
+          linewidth: 1,
+        });
+
+        const lines = new THREE.LineSegments(geo, mat);
+        lines.renderOrder = 5;
+        globe.scene().add(lines);
+        satPathLines[key] = lines;
+      }
+    }
+
+    // Update all satellites (dots + paths)
+    function updateSatellitesOnGlobe() {
+      let total = 0;
+      for (const key of Object.keys(SAT_CONSTELLATIONS)) {
+        total += updateSatDots(key);
+      }
+      satPositions.length = total; // rough tracking
       document.getElementById('satCount').textContent = total.toLocaleString();
       document.getElementById('satTotalNum').textContent = total.toLocaleString();
-      return positions;
+      // Also disable globe.gl custom layer (we manage our own)
+      globe.customLayerData([]);
     }
 
-    // Compute orbital paths (past trail + future track) for a subset of satellites
-    function computeOrbitalPaths() {
-      const now = Date.now();
-      const paths = [];
-
-      // How many path points and time range per constellation type
-      const pathCfg = {
-        iss:     { count: 999, steps: 120, spanMin: 90 },  // all ISS, full orbit
-        starlink:{ count: 15,  steps: 60,  spanMin: 45 },  // sample 15
-        oneweb:  { count: 8,   steps: 60,  spanMin: 45 },
-        gps:     { count: 6,   steps: 80,  spanMin: 180 },  // higher orbit = longer period
-        glonass: { count: 4,   steps: 80,  spanMin: 180 },
-        galileo: { count: 4,   steps: 80,  spanMin: 180 },
-        iridium: { count: 6,   steps: 60,  spanMin: 50 },
-        science: { count: 4,   steps: 60,  spanMin: 50 },
-      };
-
-      for (const [key, cfg] of Object.entries(SAT_CONSTELLATIONS)) {
-        if (!cfg.enabled || !satRawData[key]) continue;
-        const pcfg = pathCfg[key] || { count: 5, steps: 60, spanMin: 45 };
-        const records = satRawData[key].slice(0, pcfg.count);
-
-        for (const rec of records) {
-          const coords = [];
-          const halfSpan = pcfg.spanMin / 2;
-          const stepMs = (pcfg.spanMin * 60000) / pcfg.steps;
-
-          for (let i = 0; i <= pcfg.steps; i++) {
-            const t = new Date(now - halfSpan * 60000 + i * stepMs);
-            const pos = propagateSat(rec, t);
-            if (!pos) continue;
-            const rawAlt = pos.alt / EARTH_RADIUS_KM;
-            const alt = rawAlt < 0.15 ? rawAlt + 0.02 : 0.15 + Math.sqrt(rawAlt - 0.15) * 0.3;
-            coords.push({ lat: pos.lat, lng: pos.lng, alt });
-          }
-
-          if (coords.length > 2) {
-            paths.push({ coords, color: cfg.color, constellation: key });
-          }
-        }
-      }
-      return paths;
-    }
-
-    // Update satellites on the globe as floating sprites + orbital paths
-    function updateSatellitesOnGlobe() {
-      const positions = computeSatPositions();
-      globe.customLayerData(positions);
-    }
-
-    // Compute and render paths (called less frequently for performance)
     let pathTimer = null;
     function updateOrbitalPaths() {
-      const paths = computeOrbitalPaths();
-      globe.pathsData(paths);
+      for (const key of Object.keys(SAT_CONSTELLATIONS)) {
+        updateSatPaths(key);
+      }
+      // Clear globe.gl pathsData (we manage our own)
+      globe.pathsData([]);
     }
 
     // Render satellite controls panel
@@ -1069,15 +1162,31 @@
       const toggle = document.getElementById(`sat-toggle-${key}`);
       if (toggle) toggle.classList.toggle('on', cfg.enabled);
 
+      if (!cfg.enabled) {
+        // Remove Three.js objects immediately
+        updateSatDots(key);
+        updateSatPaths(key);
+        // Recount
+        let total = 0;
+        for (const k of Object.keys(SAT_CONSTELLATIONS)) {
+          if (satPointSystems[k]) total += satPointSystems[k].geometry.attributes.position.count;
+        }
+        document.getElementById('satCount').textContent = total.toLocaleString();
+        document.getElementById('satTotalNum').textContent = total.toLocaleString();
+        return;
+      }
+
       // If enabling and no data yet, fetch it
-      if (cfg.enabled && (!satRawData[key] || satRawData[key].length === 0)) {
+      if (!satRawData[key] || satRawData[key].length === 0) {
         fetchConstellation(key).then(() => {
+          updateSatDots(key);
+          updateSatPaths(key);
           updateSatellitesOnGlobe();
-          updateOrbitalPaths();
         });
       } else {
+        updateSatDots(key);
+        updateSatPaths(key);
         updateSatellitesOnGlobe();
-        updateOrbitalPaths();
       }
     }
 
@@ -1359,39 +1468,8 @@
         .labelSize(1.2).labelColor(() => '#c4b5ff')
         .labelDotRadius(0.3).labelAltitude(0.015)
 
-        // Orbital paths
-        .pathsData([])
-        .pathPoints('coords')
-        .pathPointLat('lat')
-        .pathPointLng('lng')
-        .pathPointAlt('alt')
-        .pathColor(d => {
-          const c = d.color;
-          // Gradient: faded at start (past), bright at middle (now), faded at end (future)
-          return d.constellation === 'iss'
-            ? [`${c}33`, `${c}aa`, c, `${c}aa`, `${c}33`]
-            : [`${c}15`, `${c}66`, `${c}88`, `${c}66`, `${c}15`];
-        })
-        .pathStroke(d => d.constellation === 'iss' ? 1.2 : 0.4)
-        .pathDashLength(0.01)
-        .pathDashGap(0)
-        .pathDashAnimateTime(0)
-        .pathTransitionDuration(0)
-
-        // Satellites as floating sprites via custom layer
-        .customLayerData([])
-        .customThreeObject(d => {
-          const geo = new THREE.SphereGeometry(d.radius, 8, 8);
-          const mat = new THREE.MeshBasicMaterial({
-            color: d.color,
-            transparent: true,
-            opacity: d.constellation === 'iss' ? 1.0 : 0.75,
-          });
-          return new THREE.Mesh(geo, mat);
-        })
-        .customThreeObjectUpdate((obj, d) => {
-          Object.assign(obj.position, globe.getCoords(d.lat, d.lng, d.alt));
-        });
+        // (Satellites rendered directly via THREE.js for performance)
+        ;
 
       globe.controls().autoRotate = true;
       globe.controls().autoRotateSpeed = 0.4;
